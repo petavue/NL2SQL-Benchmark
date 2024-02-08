@@ -87,7 +87,7 @@ def initialize_files(model_file_path):
     file_path = f"{model_file_path}/predicted.txt"
     metrics_file_path = f"{model_file_path}/metrics.csv"
     metrics_file = open(metrics_file_path, "w", encoding="utf-8")
-    metrics_file.write("response_time,llm_response_tokens,hardness \n")
+    metrics_file.write("response_time,llm_response_tokens,hardness\n")
 
     open(file_path, "w", encoding="utf-8")
     return (file_path, metrics_file_path)
