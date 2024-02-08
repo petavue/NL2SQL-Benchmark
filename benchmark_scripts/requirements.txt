@@ -1,3 +1,7 @@
+torch
+pandas
+numpy
+datetime
 langchain 
 einops 
 accelerate 
@@ -5,7 +9,4 @@ transformers
 bitsandbytes 
 scipy
 xformers
-sentencepiece 
-torch
-pandas
-numpy
+sentencepiece
