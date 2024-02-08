@@ -143,7 +143,7 @@ def run_queries_on_bedrock(file_path, metrics_file_path, model_name):
                     file_path,
                     metrics_file_path,
                     "I don't know\n\n",
-                    f"{0},{llm_response_tokens},{hardness} \n",
+                    f"{0},{llm_response_tokens},{hardness}\n",
                 )
                 continue
 
@@ -155,7 +155,7 @@ def run_queries_on_bedrock(file_path, metrics_file_path, model_name):
                 file_path,
                 metrics_file_path,
                 f"{sql_response}\n\n",
-                f"{response_time},{llm_response_tokens},{hardness} \n",
+                f"{response_time},{llm_response_tokens},{hardness}\n",
             )
         except Exception as e:
             print(f"An error occurred: {e}")
@@ -163,7 +163,7 @@ def run_queries_on_bedrock(file_path, metrics_file_path, model_name):
                 file_path,
                 metrics_file_path,
                 f"An error occurred: {e}\n\n",
-                f"{0},{0},{hardness} \n",
+                f"{0},{0},{hardness}\n",
             )
 
 
