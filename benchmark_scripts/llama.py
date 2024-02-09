@@ -6,9 +6,19 @@ import pandas as pd
 import math
 import re
 from datetime import datetime
+import os
+import pathlib
+
+CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
+
+# Set environment variables
+exec(open(f"{CURRENT_FILE_PATH}/../set_env_vars.py").read())
+
+# Get environment variables
+auth_token = os.getenv("HUGGING_FACE_TOKEN")
 
 start_limit = 0
-csv_file_to_read = "../dev-data/sample_cleaned200.csv"
+csv_file_to_read = "../spider_data/spider_equal_split_200.csv"
 chunk_size = 30
 file_path = "predicted.txt"
 metrics_file_path = "metrics.csv"
