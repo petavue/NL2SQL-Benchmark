@@ -8,5 +8,4 @@ accelerate
 transformers 
 bitsandbytes 
 scipy
-xformers
 sentencepiece
