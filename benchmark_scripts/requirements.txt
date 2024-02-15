@@ -1,4 +1,5 @@
 torch
+pyarrow
 pandas
 numpy
 datetime
