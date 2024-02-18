@@ -1,15 +1,15 @@
-import logging
-from pythonjsonlogger import jsonlogger
 import pandas as pd
 import os
 import math
 import re
-from typing import Any, List, Tuple
+import argparse
+from typing import Any, List, Tuple, Dict
+import json
 
 
-def get_dataset_dataframes(
+def get_datasets_info(
     dataset_length_list: List[int],
-) -> List[Tuple[int, Any, Tuple]]:
+) -> List[Tuple[int, Any, Tuple[str, str, str]]]:
     df_list = []
     for dataset_length in dataset_length_list:
         output_file_path = (
@@ -18,7 +18,8 @@ def get_dataset_dataframes(
         df = pd.read_csv(output_file_path)
         df = df[df.columns[1:]]
         query_list = list(zip(df.context, df.question, df.hardness))
-        df_list.append((dataset_length, df, query_list))
+        gold_file_list = (df["query"], df["db_id"])
+        df_list.append((dataset_length, query_list, gold_file_list))
 
     return df_list
 
@@ -62,22 +63,11 @@ def initialize_system_prompt(instruction_size: int) -> str:
     """.format(extra_instructions="".join(extra_instruction))
 
 
-def initialize_logger(log_file_path: str) -> None:
-    logFormatter = jsonlogger.JsonFormatter()
-    fileHandler = logging.FileHandler("{0}".format(log_file_path))
-    fileHandler.setFormatter(logFormatter)
-
-    rootLogger = logging.getLogger()
-    rootLogger.addHandler(fileHandler)
-    rootLogger.setLevel(logging.INFO)
-
-
 def initialize_files(model_file_path: str) -> Tuple[str, str]:
     if not os.path.exists(model_file_path):
         os.makedirs(model_file_path)
 
     log_file_path = f"{model_file_path}/execution-log.jsonl"
-    initialize_logger(log_file_path)
 
     output_file_path = f"{model_file_path}/predicted.txt"
     metrics_file_path = f"{model_file_path}/metrics.csv"
@@ -85,15 +75,14 @@ def initialize_files(model_file_path: str) -> Tuple[str, str]:
     metrics_file.write("response_time,llm_prompt_tokens,llm_response_tokens,hardness\n")
 
     open(output_file_path, "w", encoding="utf-8")
-    return (output_file_path, metrics_file_path)
+    return (output_file_path, metrics_file_path, log_file_path)
 
 
-def generate_gold_file(df: Any, model_file_path: str) -> None:
-    qry_lis = df["query"]
-    db_id_lis = df["db_id"]
+def generate_gold_file(gold_file_list: Tuple[Any, Any], model_file_path: str) -> None:
+    query_list, db_id_list = gold_file_list
     with open(f"{model_file_path}/gold.txt", "w") as f:
-        for i in range(len(qry_lis)):
-            f.write(f"{qry_lis[i]}\t{db_id_lis[i]}\n\n")
+        for i in range(len(query_list)):
+            f.write(f"{query_list[i]}\t{db_id_list[i]}\n\n")
 
 
 def get_elapsed_time(time_in_sec: int) -> None:
@@ -116,32 +105,91 @@ def write_to_file(
         file.write(metrics_file_text)
 
 
-def log(log_text: str, data: str, severity="info") -> None:
-    if severity == "error":
-        logging.error(log_text, extra=data)
-    if severity == "warning":
-        logging.warning(log_text, extra=data)
-    else:
-        logging.info(log_text, extra=data)
+def log(log_text: str, data: str, log_file_path) -> None:
+    data.update({"message": log_text})
+    with open(log_file_path, "a") as json_file:
+        json.dump(data, json_file)
+        json_file.write("\n")
 
 
-def initial_sql_match(sql_string):
+def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any.Dict]:
+    parser = argparse.ArgumentParser(
+        description=f"Run {host_env} specific NL-to-SQL LLM benchmark.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--models",
+        type=str,
+        required=True,
+        help=f"The model to use for this benchmark test. Supported models: {supported_models}",
+    )
+    parser.add_argument(
+        "--model-instructions",
+        "--model-inst",
+        type=str,
+        dest="model_instructions",
+        default="",
+        help=(
+            "A semi-colon separated list of model specific instruction set to include in the results, e.g. "
+            "cl-34=7,9,11;cl-70=5,7,9. The models specifed will run inferences for these instruction sets alone"
+        ),
+    )
+    parser.add_argument(
+        "--instructions",
+        "--inst",
+        dest="inst",
+        type=str,
+        default="5,7,9,11,13",
+        help=(
+            "A comma separated list of instructions set to include in the results, e.g. "
+            "5,7,9. The models specifed will run inferences for these instruction sets alone"
+        ),
+    )
+    parser.add_argument(
+        "--inferences-length",
+        "--il",
+        dest="inf_length",
+        type=str,
+        default="50,100,200,400",
+        help=(
+            "A comma separated list of inferences to include for each results, currently supported inference lengths: "
+            "50,100,200,400. The models specifed will run inferences for these infernce-lengths alone"
+        ),
+    )
+
+    parsed_args = parser.parse_args()
+
+    model_instructions = {}
+    if parsed_args.model_instructions:
+        for item in parsed_args.model_instructions.split(";"):
+            key, value = item.split("=")
+            model_instructions[key] = [int(inst) for inst in value.split(",")]
+
+    return (parsed_args, model_instructions)
+
+
+def initial_sql_match(sql_string: str) -> str:
     intial_regex = r"SELECT\b[^;]+"
 
-    sql_string = sql_string.replace("\n", "").replace("\\n", "")
+    sql_string = (
+        sql_string.replace("\n", " ")
+        .replace("\\n", " ")
+        .replace("\r", " ")
+        .replace("\t", " ")
+        .replace("```", " ")
+        .replace("...", " ")
+    )
     match = re.findall(intial_regex, sql_string, re.IGNORECASE)
     if match:
-        return (True, match[0])
+        return match[0]
     else:
-        return (False, sql_string)
+        return sql_string
 
 
-def intermediate_sql_match(sql_string):
-    is_sql_match, processed_str = initial_sql_match(sql_string)
-    if is_sql_match:
-        return (True, processed_str)
+def intermediate_sql_match(sql_string: str) -> Tuple[bool, str]:
+    processed_str = initial_sql_match(sql_string)
 
-    intermediate_regex = r"^(.*?)(?:\s*Explanation|\s*Caution|\s*This query|\s*```|\s*The code|\s*Please|\s*The above query|\s*This SQL query|$)"
+    intermediate_regex = r"^(.*?)(?:\s*Explanation|\s*Caution|\s*This query|\s*The code|\s*Please|\s*The above query|\s*This SQL query|$)"
     match = re.findall(intermediate_regex, processed_str, re.IGNORECASE)
     if match:
         return (True, match[0])
@@ -149,7 +197,7 @@ def intermediate_sql_match(sql_string):
         return (False, processed_str)
 
 
-def sql_match(sql_string):
+def sql_match(sql_string: str) -> Tuple[bool, str]:
     is_sql_match, processed_str = intermediate_sql_match(sql_string)
     if is_sql_match:
         return (True, processed_str)
@@ -304,7 +352,7 @@ def sql_match(sql_string):
     words = processed_str.split()
     for idx1 in range(len(words)):
         flag = 0
-        if words[idx1] == "from" or words[idx1] == "FROM":
+        if words[idx1].lower() == "from":
             for idx2 in range(idx1, len(words)):
                 choice = 0
                 for keyword in sql_keywords:
@@ -349,7 +397,7 @@ def sql_match(sql_string):
                                 break
                         if choice == 0:
                             flag = 1
-                            if words[idx2 - 1] != "END" and words[idx2 - 1] != "end":
+                            if words[idx2 - 1].lower() != "end":
                                 answer += words[idx2]
                                 answer += " "
                             break
