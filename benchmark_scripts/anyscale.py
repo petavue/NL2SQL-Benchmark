@@ -50,7 +50,7 @@ async def run_queries_on_anyscale(
     log_file_path: str,
     model_name: str,
     system_prompt: str,
-    data_to_log: Dict
+    data_to_log: Dict,
 ) -> None:
     for context, question, hardness in total_user_query:
         try:
@@ -65,7 +65,7 @@ async def run_queries_on_anyscale(
             ]
             data_to_log["request"] = req
 
-            token = os.getenv("ANY_SCALE_API_KEY")
+            token = ANY_SCALE_API_KEY
             url = f"{ANY_SCALE_BASE_URL}/chat/completions"
             body = {"model": model_name, "messages": req}
 
@@ -143,7 +143,7 @@ async def run_inferences(args: Dict, model_instructions: Dict) -> None:
                 output_file_path, metrics_file_path, log_file_path = initialize_files(
                     model_file_path
                 )
-                
+
                 data_to_log = {
                     "environment": HOST_ENV,
                     "model": model_name,
@@ -163,7 +163,7 @@ async def run_inferences(args: Dict, model_instructions: Dict) -> None:
                     log_file_path,
                     model_name,
                     system_prompt,
-                    data_to_log
+                    data_to_log,
                 )
                 generate_gold_file(gold_file_list, model_file_path)
                 loop_end_time = datetime.now()

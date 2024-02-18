@@ -112,7 +112,7 @@ def log(log_text: str, data: str, log_file_path) -> None:
         json_file.write("\n")
 
 
-def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any.Dict]:
+def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any, Dict]:
     parser = argparse.ArgumentParser(
         description=f"Run {host_env} specific NL-to-SQL LLM benchmark.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,

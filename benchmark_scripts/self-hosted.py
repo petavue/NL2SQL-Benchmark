@@ -104,7 +104,7 @@ def test_model(tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, model: 
 
     # Actually run the thing
     output = model.generate(
-        **inputs, streamer=streamer, use_cache=True, max_new_tokens=float("inf")
+        **inputs, streamer=streamer, use_cache=True, max_new_tokens=300
     )
 
     # Covert the output tokens back to text
