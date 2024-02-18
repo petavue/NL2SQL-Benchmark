@@ -1,0 +1,9 @@
+nohup.out
+.DS_Store
+*.pyc
+
+# generated files
+predicted.txt
+metrics.csv
+gold.txt
+execution-log.jsonl
