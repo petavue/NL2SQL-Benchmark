@@ -10,18 +10,18 @@ import json
 def get_datasets_info(
     dataset_length_list: List[int],
 ) -> List[Tuple[int, Any, Tuple[str, str, str]]]:
-    df_list = []
+    datasets_info = []
     for dataset_length in dataset_length_list:
         output_file_path = (
             f"../spider_data/spider_equal_split_{str(dataset_length)}.csv"
         )
         df = pd.read_csv(output_file_path)
-        df = df[df.columns[1:]]
-        query_list = list(zip(df.context, df.question, df.hardness))
-        gold_file_list = (df["query"], df["db_id"])
-        df_list.append((dataset_length, query_list, gold_file_list))
 
-    return df_list
+        query_list = list(zip(df.context, df.question, df.hardness))
+        gold_file_list = (df["sql_query"], df["db_id"])
+        datasets_info.append((dataset_length, query_list, gold_file_list))
+
+    return datasets_info
 
 
 def initialize_system_prompt(instruction_size: int) -> str:
@@ -75,6 +75,7 @@ def initialize_files(model_file_path: str) -> Tuple[str, str]:
     metrics_file.write("response_time,llm_prompt_tokens,llm_response_tokens,hardness\n")
 
     open(output_file_path, "w", encoding="utf-8")
+    open(log_file_path, "w", encoding="utf-8")
     return (output_file_path, metrics_file_path, log_file_path)
 
 
@@ -130,8 +131,8 @@ def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any, Dict]:
         dest="model_instructions",
         default="",
         help=(
-            "A semi-colon separated list of model specific instruction set to include in the results, e.g. "
-            "cl-34=7,9,11;cl-70=5,7,9. The models specifed will run inferences for these instruction sets alone"
+            "A slash('/') separated list of model specific instruction set to include in the results, e.g. "
+            "cl-34=7,9,11/cl-70=5,7,9. The models specifed will run inferences for these instruction sets alone"
         ),
     )
     parser.add_argument(
@@ -161,7 +162,7 @@ def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any, Dict]:
 
     model_instructions = {}
     if parsed_args.model_instructions:
-        for item in parsed_args.model_instructions.split(";"):
+        for item in parsed_args.model_instructions.split("/"):
             key, value = item.split("=")
             model_instructions[key] = [int(inst) for inst in value.split(",")]
 
