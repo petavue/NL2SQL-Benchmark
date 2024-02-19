@@ -120,11 +120,20 @@ def run_queries_on_model(
     system_prompt: str,
     tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
     model: Any,
-    data_to_log: Dict,
+    instruction_size: int,
+    dataset_length: int,
 ) -> None:
     for context, question, hardness in total_user_query:
         torch.cuda.empty_cache()
         try:
+            data_to_log = {
+                "environment": HOST_ENV,
+                "model": model_name,
+                "instruction_size": instruction_size,
+                "dataset_length": dataset_length,
+                "severity": "info",
+                "is_sql": 0,
+            }
             if model_name in [
                 MODEL_META_CODELLAMA_70B,
                 MODEL_MISTRALAI_MISTRAL_7B,
@@ -240,6 +249,8 @@ def run_inferences(args: Dict, model_instructions: Dict) -> None:
     for model_name_from_args in args.models.split(","):
         if model_instructions:
             instruction_size_list = model_instructions[model_name_from_args]
+        elif args.inst:
+            instruction_size_list = [int(inst) for inst in args.inst.split(",")]
         else:
             instruction_size_list = Defaults.INSTRUCTION_SIZE_LIST
 
@@ -256,16 +267,8 @@ def run_inferences(args: Dict, model_instructions: Dict) -> None:
                     model_file_path
                 )
 
-                data_to_log = {
-                    "environment": HOST_ENV,
-                    "model": model_name,
-                    "instruction_size": instruction_size,
-                    "dataset_length": dataset_length,
-                    "severity": "info",
-                    "is_sql": 0,
-                }
                 print(
-                    f"Starting loop for {model_name} - {instruction_size} instructions - {dataset_length} records"
+                    f"Starting loop for {model_name} - {instruction_size} instructions - {dataset_length} inferences"
                 )
                 loop_start_time = datetime.now()
                 run_queries_on_model(
@@ -277,7 +280,8 @@ def run_inferences(args: Dict, model_instructions: Dict) -> None:
                     system_prompt,
                     tokenizer,
                     model,
-                    data_to_log,
+                    instruction_size,
+                    dataset_length,
                 )
                 generate_gold_file(gold_file_list, model_file_path)
                 loop_end_time = datetime.now()

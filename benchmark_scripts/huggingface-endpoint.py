@@ -1,9 +1,8 @@
 from datetime import datetime
 import os
+import asyncio
 import pathlib
 import requests
-from openai import AsyncOpenAI
-import asyncio
 from common_functions import (
     get_datasets_info,
     initialize_system_prompt,
@@ -15,41 +14,25 @@ from common_functions import (
     sql_match,
     get_parsed_args,
 )
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict
 from common_constants import Defaults, Environments
 
 CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
 
 # Set environment variables
 exec(open(f"{CURRENT_FILE_PATH}/../set_env_vars.py").read())
-HOST_ENV = Environments.ANYSCALE
+HOST_ENV = Environments.HUGGING_FACE
 
-# Get environment variables
-ANY_SCALE_API_KEY = os.getenv("ANY_SCALE_API_KEY")
-OPENAI_KEY = os.getenv("OPENAI_KEY")
-
-ANY_SCALE_BASE_URL = "https://api.endpoints.anyscale.com/v1"
-
-MODEL_META_LLAMA = "meta-llama/Llama-2-70b-chat-hf"
 MODEL_META_CODELLAMA_70B = "codellama/CodeLlama-70b-Instruct-hf"
 MODEL_META_CODELLAMA_34B = "codellama/CodeLlama-34b-Instruct-hf"
-MODEL_MISTRALAI_MISTRAL_7B = "mistralai/Mistral-7B-Instruct-v0.1"
-MODEL_MISTRALAI_MIXTRAL_8X7B = "mistralai/Mixtral-8x7B-Instruct-v0.1"
-MODEL_GPT_3 = "gpt-3.5-turbo-16k"
-MODEL_GPT_4 = "gpt-4-turbo-preview"
 
 supported_models = {
     "cl-70": MODEL_META_CODELLAMA_70B,
     "cl-34": MODEL_META_CODELLAMA_34B,
-    "mistral": MODEL_MISTRALAI_MISTRAL_7B,
-    "mixtral": MODEL_MISTRALAI_MIXTRAL_8X7B,
-    "llama": MODEL_META_LLAMA,
-    "gpt-4": MODEL_GPT_4,
-    "gpt-3": MODEL_GPT_3,
 }
 
 
-async def run_queries_on_anyscale(
+def run_queries_on_hugging_face(
     total_user_query: Tuple[str, str, str],
     output_file_path: str,
     metrics_file_path: str,
@@ -58,7 +41,6 @@ async def run_queries_on_anyscale(
     system_prompt: str,
     instruction_size: int,
     dataset_length: int,
-    client: Any,
 ) -> None:
     for context, question, hardness in total_user_query:
         try:
@@ -70,28 +52,30 @@ async def run_queries_on_anyscale(
                 "severity": "info",
                 "is_sql": 0,
             }
-            req = [
-                {
-                    "role": "system",
-                    "content": system_prompt.replace("[context]", context).replace(
+            payload = f"<s>Source: system\n\n {system_prompt.replace("[context]", context).replace(
                         "[question]", ""
-                    ),
-                },
-                {"role": "user", "content": question},
-            ]
-            data_to_log["request"] = req
+                    )}\n  <step> Source: user\n\n {question}  <step> Source: user: assistant\nDestination: user"
+
+            body = {
+                "inputs": payload,
+                "parameters": {"max_new_tokens": 200, "stop": ["</s>", "<step>"]},
+            }
+
+            data_to_log["request"] = body
+            headers = {"Authorization": f"Bearer { os.getenv("HUGGING_FACE_TOKEN")}"}
+            API_URL = f"https://api-inference.huggingface.co/models/{model_name}"
 
             response_time_start = datetime.now()
-            anyscale_response = await client.chat.completions.create(
-                model=model_name,
-                messages=req,
-            )
+            with requests.Session().post(
+                API_URL, headers=headers, json=body
+            ) as api_response:
+                hf_response = api_response.json()
             response_time_stop = datetime.now()
-            data_to_log["response"] = str(anyscale_response)
+            data_to_log["response"] = hf_response
 
-            llm_response_content = anyscale_response.choices[0].message.content
-            llm_response_tokens = anyscale_response.usage.completion_tokens
-            llm_prompt_tokens = anyscale_response.usage.prompt_tokens
+            llm_response_content = hf_response[0]["generated_text"]
+            llm_response_tokens = 0
+            llm_prompt_tokens = 0
 
             if "select" in llm_response_content.lower():
                 is_sql_match, sql_response = sql_match(llm_response_content)
@@ -132,7 +116,7 @@ async def run_queries_on_anyscale(
             )
 
 
-async def run_inferences(args: Dict, model_instructions: Dict) -> None:
+def run_inferences(args: Dict, model_instructions: Dict) -> None:
     inference_length_in_args = [int(inst) for inst in args.inf_length.split(",")]
     dataset_length_list = inference_length_in_args or Defaults.INFERENCE_LENGTH_LIST
 
@@ -148,11 +132,6 @@ async def run_inferences(args: Dict, model_instructions: Dict) -> None:
 
         model_name = supported_models[model_name_from_args]
 
-        if model_name in [MODEL_GPT_4, MODEL_GPT_3]:
-            client = AsyncOpenAI(api_key=OPENAI_KEY)
-        else:
-            client = AsyncOpenAI(api_key=ANY_SCALE_API_KEY, base_url=ANY_SCALE_BASE_URL)
-
         for instruction_size in instruction_size_list:
             system_prompt = initialize_system_prompt(instruction_size)
 
@@ -162,12 +141,11 @@ async def run_inferences(args: Dict, model_instructions: Dict) -> None:
                 output_file_path, metrics_file_path, log_file_path = initialize_files(
                     model_file_path
                 )
-
                 print(
-                    f"Starting loop for {model_name} - {instruction_size} instructions - {dataset_length} inferences"
+                    f"Starting loop for {model_name} - {instruction_size} instructions - {dataset_length} records"
                 )
                 loop_start_time = datetime.now()
-                await run_queries_on_anyscale(
+                run_queries_on_hugging_face(
                     query_list,
                     output_file_path,
                     metrics_file_path,
@@ -176,7 +154,6 @@ async def run_inferences(args: Dict, model_instructions: Dict) -> None:
                     system_prompt,
                     instruction_size,
                     dataset_length,
-                    client,
                 )
                 generate_gold_file(gold_file_list, model_file_path)
                 loop_end_time = datetime.now()
@@ -188,5 +165,4 @@ async def run_inferences(args: Dict, model_instructions: Dict) -> None:
 
 if __name__ == "__main__":
     args, model_instructions = get_parsed_args(supported_models, HOST_ENV)
-
-    asyncio.run(run_inferences(args, model_instructions))
+    run_inferences(args, model_instructions)

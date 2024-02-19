@@ -7,6 +7,7 @@ class Environments:
     ANYSCALE = "anyscale"
     AMZ_BEDROCK = "amazon-bedrock"
     SELF_HOSTED = "self-hosted"
+    HUGGING_FACE = "hugging-face"
 
 
 class BedrockModels:
