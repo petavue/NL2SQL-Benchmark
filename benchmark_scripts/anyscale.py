@@ -14,6 +14,7 @@ from common_functions import (
     get_elapsed_time,
     sql_match,
     get_parsed_args,
+    get_few_shot_sample_string,
 )
 from typing import Tuple, Dict, Any
 from common_constants import Defaults, Environments
@@ -29,6 +30,8 @@ ANY_SCALE_API_KEY = os.getenv("ANY_SCALE_API_KEY")
 OPENAI_KEY = os.getenv("OPENAI_KEY")
 
 ANY_SCALE_BASE_URL = "https://api.endpoints.anyscale.com/v1"
+
+SHOT_SAMPLE = "0-shot-cot"
 
 MODEL_META_LLAMA = "meta-llama/Llama-2-70b-chat-hf"
 MODEL_META_CODELLAMA_70B = "codellama/CodeLlama-70b-Instruct-hf"
@@ -59,8 +62,9 @@ async def run_queries_on_anyscale(
     instruction_size: int,
     dataset_length: int,
     client: Any,
+    few_shot_samples,
 ) -> None:
-    for context, question, hardness in total_user_query:
+    for context, question, hardness, db_id in total_user_query:
         try:
             data_to_log = {
                 "environment": HOST_ENV,
@@ -70,6 +74,8 @@ async def run_queries_on_anyscale(
                 "severity": "info",
                 "is_sql": 0,
             }
+
+            system_prompt = get_few_shot_sample_string(few_shot_samples[db_id], system_prompt)
             req = [
                 {
                     "role": "system",
@@ -77,7 +83,11 @@ async def run_queries_on_anyscale(
                         "[question]", ""
                     ),
                 },
-                {"role": "user", "content": question},
+                {
+                    "role": "user",
+                    "content": f"{question}",
+                    # "content": f"{question} \n    Let's think step by step.",
+                },
             ]
             data_to_log["request"] = req
 
@@ -136,7 +146,7 @@ async def run_inferences(args: Dict, model_instructions: Dict) -> None:
     inference_length_in_args = [int(inst) for inst in args.inf_length.split(",")]
     dataset_length_list = inference_length_in_args or Defaults.INFERENCE_LENGTH_LIST
 
-    datasets_info = get_datasets_info(dataset_length_list)
+    datasets_info, few_shot_samples = get_datasets_info(dataset_length_list)
 
     for model_name_from_args in args.models.split(","):
         if model_instructions:
@@ -157,7 +167,7 @@ async def run_inferences(args: Dict, model_instructions: Dict) -> None:
             system_prompt = initialize_system_prompt(instruction_size)
 
             for dataset_length, query_list, gold_file_list in datasets_info:
-                model_file_path = f"{CURRENT_FILE_PATH}/{HOST_ENV}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
+                model_file_path = f"{CURRENT_FILE_PATH}/{HOST_ENV}/{SHOT_SAMPLE}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
 
                 output_file_path, metrics_file_path, log_file_path = initialize_files(
                     model_file_path
@@ -177,6 +187,7 @@ async def run_inferences(args: Dict, model_instructions: Dict) -> None:
                     instruction_size,
                     dataset_length,
                     client,
+                    few_shot_samples,
                 )
                 generate_gold_file(gold_file_list, model_file_path)
                 loop_end_time = datetime.now()

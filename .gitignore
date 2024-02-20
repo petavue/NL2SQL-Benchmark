@@ -1,6 +1,7 @@
 nohup.out
 .DS_Store
 *.pyc
+*.zip
 
 # generated files
 predicted.txt

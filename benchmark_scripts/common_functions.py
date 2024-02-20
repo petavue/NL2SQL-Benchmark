@@ -5,23 +5,47 @@ import re
 import argparse
 from typing import Any, List, Tuple, Dict
 import json
+from ast import literal_eval
 
 
 def get_datasets_info(
     dataset_length_list: List[int],
-) -> List[Tuple[int, Any, Tuple[str, str, str]]]:
+) -> Tuple[List[Tuple[int, Any, Tuple[str, str]]], Tuple[List[Dict]]]:
     datasets_info = []
     for dataset_length in dataset_length_list:
         output_file_path = (
             f"../spider_data/spider_equal_split_{str(dataset_length)}.csv"
         )
-        df = pd.read_csv(output_file_path)
+        spider_data_frame = pd.read_csv(output_file_path)
 
-        query_list = list(zip(df.context, df.question, df.hardness))
-        gold_file_list = (df["sql_query"], df["db_id"])
+        query_list = list(
+            zip(
+                spider_data_frame.context,
+                spider_data_frame.question,
+                spider_data_frame.hardness,
+                spider_data_frame.db_id,
+            )
+        )
+        gold_file_list = (spider_data_frame.sql_query, spider_data_frame.db_id)
+
         datasets_info.append((dataset_length, query_list, gold_file_list))
 
-    return datasets_info
+    with open("../spider_data/200_inferences_6_samples.txt") as samples_file:
+        contents = samples_file.read()
+        few_shot_samples = literal_eval(contents)
+
+    return (datasets_info, few_shot_samples)
+
+
+def get_few_shot_sample_string(few_shot_sample: List[Dict], prompt: str) -> str:
+    parsed_str = list(
+        map(
+            lambda sample_dict: f"\n    Q: {sample_dict['question']}\n    A: {sample_dict['query']}",
+            few_shot_sample,
+        )
+    )
+    returned_str = prompt.replace("[examples]", "".join(parsed_str))
+    return returned_str
 
 
 def initialize_system_prompt(instruction_size: int) -> str:
@@ -106,7 +130,7 @@ def write_to_file(
         file.write(metrics_file_text)
 
 
-def log(log_text: str, data: str, log_file_path) -> None:
+def log(log_text: str, data: Dict, log_file_path: str) -> None:
     data.update({"message": log_text})
     with open(log_file_path, "a") as json_file:
         json.dump(data, json_file)
