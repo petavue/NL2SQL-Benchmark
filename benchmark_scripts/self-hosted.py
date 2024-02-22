@@ -261,7 +261,7 @@ def run_inferences(args: Dict, model_instructions: Dict) -> None:
             system_prompt = initialize_system_prompt(instruction_size)
 
             for dataset_length, query_list, gold_file_list in datasets_info:
-                model_file_path = f"{CURRENT_FILE_PATH}/{HOST_ENV}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
+                model_file_path = f"{args.target_dir}/{HOST_ENV}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
 
                 output_file_path, metrics_file_path, log_file_path = initialize_files(
                     model_file_path
