@@ -5,6 +5,9 @@ import re
 import argparse
 from typing import Any, List, Tuple, Dict
 import json
+import pathlib
+
+CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
 
 
 def get_datasets_info(
@@ -156,6 +159,13 @@ def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any, Dict]:
             "A comma separated list of inferences to include for each results, currently supported inference lengths: "
             "50,100,200,400. The models specifed will run inferences for these infernce-lengths alone"
         ),
+    )
+    parser.add_argument(
+        "--target-directory",
+        type=str,
+        dest="target_dir",
+        default=CURRENT_FILE_PATH,
+        help="Name of the directory to store the compressed file",
     )
 
     parsed_args = parser.parse_args()
