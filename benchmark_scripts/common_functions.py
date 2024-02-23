@@ -359,21 +359,16 @@ def sql_match(sql_string: str) -> Tuple[bool, str]:
         ">=",
         "<=",
     ]
+    sql_keyword_dict = {word: True for word in sql_keywords}
     answer = ""
     words = processed_str.split()
     for idx1 in range(len(words)):
         flag = 0
         if words[idx1].lower() == "from":
             for idx2 in range(idx1, len(words)):
-                choice = 0
-                for keyword in sql_keywords:
-                    if words[idx2] == keyword:
-                        choice = 1
-                        answer += words[idx2]
-                        answer += " "
-                        break
-                if choice == 1:
-                    continue
+                if words[idx2] in sql_keyword_dict:
+                    ans += words[idx2]
+                    ans += " "
                 else:
                     if (idx2 + 1) >= len(words):
                         answer += words[idx2]
@@ -383,14 +378,9 @@ def sql_match(sql_string: str) -> Tuple[bool, str]:
                         answer += words[idx2]
                         answer += " "
                         continue
-                    for key in sql_keywords:
-                        if words[idx2 + 1] == key:
-                            choice = 1
-                            answer += words[idx2]
-                            answer += " "
-                            break
-                    if choice == 1:
-                        continue
+                    if words[idx2 + 1] in sql_keyword_dict:
+                        ans += words[idx2]
+                        ans += " "
                     else:
                         if (idx2 + 2) >= len(words):
                             answer += words[idx2]
@@ -400,13 +390,10 @@ def sql_match(sql_string: str) -> Tuple[bool, str]:
                             answer += words[idx2]
                             answer += " "
                             continue
-                        for keyword in sql_keywords:
-                            if words[idx2 + 2] == keyword:
-                                choice = 1
-                                answer += words[idx2]
-                                answer += " "
-                                break
-                        if choice == 0:
+                        if words[idx2 + 2] in sql_keyword_dict:
+                            ans += words[idx2]
+                            ans += " "
+                        else:
                             flag = 1
                             if words[idx2 - 1].lower() != "end":
                                 answer += words[idx2]
