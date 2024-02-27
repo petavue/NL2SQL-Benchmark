@@ -10,6 +10,9 @@ from transformers import (
 import torch
 from datetime import datetime
 import os
+import asyncio
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 import pathlib
 from common_functions import (
     get_datasets_info,
@@ -123,7 +126,7 @@ def run_queries_on_model(
     instruction_size: int,
     dataset_length: int,
 ) -> None:
-    for context, question, hardness in total_user_query:
+    for context, question, hardness in total_user_query[0:1]:
         torch.cuda.empty_cache()
         try:
             data_to_log = {
@@ -239,8 +242,48 @@ def run_queries_on_model(
                 f"{0},{0},{0},{hardness}\n",
             )
 
+async def multi_process(instruction_size,datasets_info, model_name, args):
+    # print(instruction_size)
+    # print(model_name)
+    system_prompt = initialize_system_prompt(instruction_size)
+    tokenizer, model = initialize_model_and_tokenizer(model_name)
+    for dataset_length, query_list, gold_file_list in datasets_info:
+        model_file_path = f"{args.target_dir}/{HOST_ENV}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
 
-def run_inferences(args: Dict, model_instructions: Dict) -> None:
+        output_file_path, metrics_file_path, log_file_path = initialize_files(
+            model_file_path
+        )
+
+        print(
+            f"Starting loop for {model_name} - {instruction_size} instructions - {dataset_length} inferences"
+        )
+        loop_start_time = datetime.now()
+        run_queries_on_model(
+            query_list,
+            output_file_path,
+            metrics_file_path,
+            log_file_path,
+            model_name,
+            system_prompt,
+            tokenizer,
+            model,
+            instruction_size,
+            dataset_length,
+        )
+        generate_gold_file(gold_file_list, model_file_path)
+        loop_end_time = datetime.now()
+        total_secs = (loop_end_time - loop_start_time).total_seconds()
+        print(
+            f"Time taken for {dataset_length} records: {get_elapsed_time(total_secs)}"
+        )
+
+def async_wrapper(instruction_size,datasets_info, model_name, args):
+    loop = asyncio.get_event_loop()
+    result = loop.run_until_complete(multi_process(instruction_size,datasets_info, model_name, args))
+    return result
+
+async def main():
+    args, model_instructions = get_parsed_args(supported_models, HOST_ENV)
     inference_length_in_args = [int(inst) for inst in args.inf_length.split(",")]
     dataset_length_list = inference_length_in_args or Defaults.INFERENCE_LENGTH_LIST
 
@@ -255,43 +298,17 @@ def run_inferences(args: Dict, model_instructions: Dict) -> None:
             instruction_size_list = Defaults.INSTRUCTION_SIZE_LIST
 
         model_name = supported_models[model_name_from_args]
-        tokenizer, model = initialize_model_and_tokenizer(model_name)
 
-        for instruction_size in instruction_size_list:
-            system_prompt = initialize_system_prompt(instruction_size)
+        loop = asyncio.get_running_loop()
+        tasks = []
 
-            for dataset_length, query_list, gold_file_list in datasets_info:
-                model_file_path = f"{args.target_dir}/{HOST_ENV}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
+        with ProcessPoolExecutor() as executor:
+            for instruction_size in instruction_size_list:
+                partial_func = partial(async_wrapper, instruction_size, datasets_info, model_name, args)
+                tasks.append(loop.run_in_executor(executor, partial_func))
 
-                output_file_path, metrics_file_path, log_file_path = initialize_files(
-                    model_file_path
-                )
-
-                print(
-                    f"Starting loop for {model_name} - {instruction_size} instructions - {dataset_length} inferences"
-                )
-                loop_start_time = datetime.now()
-                run_queries_on_model(
-                    query_list,
-                    output_file_path,
-                    metrics_file_path,
-                    log_file_path,
-                    model_name,
-                    system_prompt,
-                    tokenizer,
-                    model,
-                    instruction_size,
-                    dataset_length,
-                )
-                generate_gold_file(gold_file_list, model_file_path)
-                loop_end_time = datetime.now()
-                total_secs = (loop_end_time - loop_start_time).total_seconds()
-                print(
-                    f"Time taken for {dataset_length} records: {get_elapsed_time(total_secs)}"
-                )
-
-
+            for done in asyncio.as_completed(tasks):
+                result = await done
+            
 if __name__ == "__main__":
-    args, model_instructions = get_parsed_args(supported_models, HOST_ENV)
-
-    run_inferences(args, model_instructions)
+    asyncio.run(main())
