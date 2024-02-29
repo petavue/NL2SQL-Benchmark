@@ -10,8 +10,10 @@ from ast import literal_eval
 
 def get_datasets_info(
     dataset_length_list: List[int],
-) -> Tuple[List[Tuple[int, Any, Tuple[str, str]]], Tuple[List[Dict]]]:
+    shot_size_list: List[int],):
+# ) -> Tuple[List[Tuple[int, Any, Tuple[str, str]]], Tuple[Tuple[List[Dict]]]]:
     datasets_info = []
+    shot_info = []
     for dataset_length in dataset_length_list:
         output_file_path = (
             f"../spider_data/spider_equal_split_{str(dataset_length)}.csv"
@@ -30,17 +32,23 @@ def get_datasets_info(
 
         datasets_info.append((dataset_length, query_list, gold_file_list))
 
-    with open("../spider_data/200_inferences_6_samples.txt") as samples_file:
-        contents = samples_file.read()
-        few_shot_samples = literal_eval(contents)
+        for shot_size in shot_size_list:
+            if shot_size==0:
+                continue
 
-    return (datasets_info, few_shot_samples)
+            with open(f"../spider_data/{str(dataset_length)}_inferences_{shot_size}_samples.txt") as samples_file:
+                contents = samples_file.read()
+                few_shot_samples = literal_eval(contents)
+                shot_info.append((dataset_length,shot_size ,few_shot_samples))
+        
+
+    return (datasets_info, shot_info)
 
 
 def get_few_shot_sample_string(few_shot_sample: List[Dict], prompt: str) -> str:
     parsed_str = list(
         map(
-            lambda sample_dict: f"\n    Q: {sample_dict['question']}\n    A: {sample_dict['query']}",
+            lambda sample_dict: f"\n    Q: {sample_dict['question']}\n    A: {sample_dict['sql_query']}",
             few_shot_sample,
         )
     )
@@ -84,6 +92,8 @@ def initialize_system_prompt(instruction_size: int) -> str:
     5. use SQL functions like 'wildcards', 'procedures', 'exists', and 'case' to simplify the query if needed. {extra_instructions}
     
     [question]
+
+    [examples]
     """.format(extra_instructions="".join(extra_instruction))
 
 
@@ -179,6 +189,17 @@ def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any, Dict]:
         help=(
             "A comma separated list of inferences to include for each results, currently supported inference lengths: "
             "50,100,200,400. The models specifed will run inferences for these infernce-lengths alone"
+        ),
+    )
+    parser.add_argument(
+        "--shot-size",
+        "--ss",
+        dest="shot_size",
+        type=str,
+        default="0",
+        help=(
+            "A comma separated list of inferences to include for each results, currently supported shot size: "
+            "2,4,6,8. The models specifed will run inferences for these infernce-lengths alone"
         ),
     )
 

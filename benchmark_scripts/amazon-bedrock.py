@@ -5,6 +5,7 @@ from datetime import datetime
 import pathlib
 from common_functions import (
     get_datasets_info,
+    get_few_shot_sample_string,
     initialize_system_prompt,
     initialize_files,
     generate_gold_file,
@@ -55,8 +56,10 @@ def run_queries_on_bedrock(
     bedrock_runtime_client: Any,
     instruction_size: int,
     dataset_length: int,
+    few_shot_samples:Any,
+    SHOT_SAMPLE:str,
 ) -> None:
-    for context, question, hardness in total_user_query:
+    for context, question, hardness,db_id in total_user_query:
         try:
             data_to_log = {
                 "environment": HOST_ENV,
@@ -66,6 +69,12 @@ def run_queries_on_bedrock(
                 "severity": "info",
                 "is_sql": 0,
             }
+            for shots in few_shot_samples:
+                    if int(SHOT_SAMPLE[0])==0:
+                        system_prompt = system_prompt.replace('[examples]','')
+                    elif(shots[0]==int(dataset_length) and shots[1]==int(SHOT_SAMPLE[0])):
+                        system_prompt = get_few_shot_sample_string(shots[2][db_id], system_prompt)
+            
             prompt = system_prompt.replace("[context]", context).replace(
                 "[question]", question
             )
@@ -149,8 +158,10 @@ def run_queries_on_bedrock(
 def run_inferences(args: Dict, model_instructions: Dict) -> None:
     inference_length_in_args = [int(inst) for inst in args.inf_length.split(",")]
     dataset_length_list = inference_length_in_args or Defaults.INFERENCE_LENGTH_LIST
+    shot_size_list = [int(inst) for inst in args.shot_size.split(",")]
 
-    datasets_info = get_datasets_info(dataset_length_list)
+
+    datasets_info, few_shot_samples = get_datasets_info(dataset_length_list,shot_size_list)
     bedrock_runtime_client = initialize_amz_bedrock()
 
     for model_name_from_args in args.models.split(","):
@@ -162,38 +173,41 @@ def run_inferences(args: Dict, model_instructions: Dict) -> None:
             instruction_size_list = Defaults.INSTRUCTION_SIZE_LIST
 
         model_name = supported_models[model_name_from_args]
+    for shot_size in shot_size_list:
+            SHOT_SAMPLE = f"{shot_size}-shot-cot"
+            for instruction_size in instruction_size_list:
+                system_prompt = initialize_system_prompt(instruction_size)
 
-        for instruction_size in instruction_size_list:
-            system_prompt = initialize_system_prompt(instruction_size)
+                for dataset_length, query_list, gold_file_list in datasets_info:
+                    model_file_path = f"{CURRENT_FILE_PATH}/{HOST_ENV}/{SHOT_SAMPLE}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
 
-            for dataset_length, query_list, gold_file_list in datasets_info:
-                model_file_path = f"{CURRENT_FILE_PATH}/{HOST_ENV}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
+                    output_file_path, metrics_file_path, log_file_path = initialize_files(
+                        model_file_path
+                    )
 
-                output_file_path, metrics_file_path, log_file_path = initialize_files(
-                    model_file_path
-                )
-
-                print(
-                    f"Starting loop for {model_name} - {instruction_size} instructions - {dataset_length} inferences"
-                )
-                loop_start_time = datetime.now()
-                run_queries_on_bedrock(
-                    query_list,
-                    output_file_path,
-                    metrics_file_path,
-                    log_file_path,
-                    model_name,
-                    system_prompt,
-                    bedrock_runtime_client,
-                    instruction_size,
-                    dataset_length,
-                )
-                generate_gold_file(gold_file_list, model_file_path)
-                loop_end_time = datetime.now()
-                total_secs = (loop_end_time - loop_start_time).total_seconds()
-                print(
-                    f"Time taken for {dataset_length} records: {get_elapsed_time(total_secs)}"
-                )
+                    print(
+                        f"Starting loop for {model_name} - {instruction_size} instructions - {dataset_length} inferences"
+                    )
+                    loop_start_time = datetime.now()
+                    run_queries_on_bedrock(
+                        query_list,
+                        output_file_path,
+                        metrics_file_path,
+                        log_file_path,
+                        model_name,
+                        system_prompt,
+                        bedrock_runtime_client,
+                        instruction_size,
+                        dataset_length,
+                        few_shot_samples,
+                        SHOT_SAMPLE
+                    )
+                    generate_gold_file(gold_file_list, model_file_path)
+                    loop_end_time = datetime.now()
+                    total_secs = (loop_end_time - loop_start_time).total_seconds()
+                    print(
+                        f"Time taken for {dataset_length} records: {get_elapsed_time(total_secs)}"
+                    )
 
 
 if __name__ == "__main__":
