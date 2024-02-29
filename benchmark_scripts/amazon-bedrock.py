@@ -16,6 +16,7 @@ from common_functions import (
     get_elapsed_time,
     sql_match,
     get_parsed_args,
+    multi_process_setup,
 )
 from typing import Any, Tuple, Dict
 from common_constants import Defaults, Environments
@@ -59,7 +60,7 @@ def run_queries_on_bedrock(
     instruction_size: int,
     dataset_length: int,
 ) -> None:
-    for context, question, hardness in total_user_query[0:1]:
+    for context, question, hardness in total_user_query:
         try:
             data_to_log = {
                 "environment": HOST_ENV,
@@ -149,7 +150,10 @@ def run_queries_on_bedrock(
             )
 
 
-async def multi_process(instruction_size,datasets_info, model_name, args):
+async def multi_process(
+    instruction_size: int, datasets_info: list, model_name: str, args: Any
+) -> None:
+
     system_prompt = initialize_system_prompt(instruction_size)
     bedrock_runtime_client = initialize_amz_bedrock()
     for dataset_length, query_list, gold_file_list in datasets_info:
@@ -180,11 +184,6 @@ async def multi_process(instruction_size,datasets_info, model_name, args):
             f"Time taken for {dataset_length} records: {get_elapsed_time(total_secs)}"
         )
 
-def async_wrapper(instruction_size,datasets_info, model_name, args):
-    loop = asyncio.get_event_loop()
-    result = loop.run_until_complete(multi_process(instruction_size,datasets_info, model_name, args))
-    return result
-
 async def main():
     args, model_instructions = get_parsed_args(supported_models, HOST_ENV)
     inference_length_in_args = [int(inst) for inst in args.inf_length.split(",")]
@@ -201,16 +200,9 @@ async def main():
             instruction_size_list = Defaults.INSTRUCTION_SIZE_LIST
 
         model_name = supported_models[model_name_from_args]
+        await multi_process_setup(
+            multi_process, instruction_size_list, datasets_info, model_name, args
+        )
 
-        loop = asyncio.get_running_loop()
-        tasks = []
-
-        with ProcessPoolExecutor() as executor:
-            for instruction_size in instruction_size_list:
-                partial_func = partial(async_wrapper, instruction_size, datasets_info, model_name, args)
-                tasks.append(loop.run_in_executor(executor, partial_func))
-            for done in asyncio.as_completed(tasks):
-                result = await done
-        
 if __name__ == "__main__":
     asyncio.run(main())

@@ -24,6 +24,7 @@ from common_functions import (
     get_elapsed_time,
     sql_match,
     get_parsed_args,
+    multi_process_setup,
 )
 from typing import Tuple, Dict, Any
 from common_constants import Defaults, Environments
@@ -126,7 +127,7 @@ def run_queries_on_model(
     instruction_size: int,
     dataset_length: int,
 ) -> None:
-    for context, question, hardness in total_user_query[0:1]:
+    for context, question, hardness in total_user_query:
         torch.cuda.empty_cache()
         try:
             data_to_log = {
@@ -242,9 +243,10 @@ def run_queries_on_model(
                 f"{0},{0},{0},{hardness}\n",
             )
 
-async def multi_process(instruction_size,datasets_info, model_name, args):
-    # print(instruction_size)
-    # print(model_name)
+
+async def multi_process(
+    instruction_size: int, datasets_info: list, model_name: str, args: Any
+) -> None:
     system_prompt = initialize_system_prompt(instruction_size)
     tokenizer, model = initialize_model_and_tokenizer(model_name)
     for dataset_length, query_list, gold_file_list in datasets_info:
@@ -277,10 +279,6 @@ async def multi_process(instruction_size,datasets_info, model_name, args):
             f"Time taken for {dataset_length} records: {get_elapsed_time(total_secs)}"
         )
 
-def async_wrapper(instruction_size,datasets_info, model_name, args):
-    loop = asyncio.get_event_loop()
-    result = loop.run_until_complete(multi_process(instruction_size,datasets_info, model_name, args))
-    return result
 
 async def main():
     args, model_instructions = get_parsed_args(supported_models, HOST_ENV)
@@ -299,16 +297,10 @@ async def main():
 
         model_name = supported_models[model_name_from_args]
 
-        loop = asyncio.get_running_loop()
-        tasks = []
+        await multi_process_setup(
+            multi_process, instruction_size_list, datasets_info, model_name, args
+        )
 
-        with ProcessPoolExecutor() as executor:
-            for instruction_size in instruction_size_list:
-                partial_func = partial(async_wrapper, instruction_size, datasets_info, model_name, args)
-                tasks.append(loop.run_in_executor(executor, partial_func))
 
-            for done in asyncio.as_completed(tasks):
-                result = await done
-            
 if __name__ == "__main__":
     asyncio.run(main())
