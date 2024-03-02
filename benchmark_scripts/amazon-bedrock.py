@@ -1,6 +1,9 @@
 import os
 import boto3
 import json
+import asyncio
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 from datetime import datetime
 import pathlib
 from common_functions import (
@@ -13,6 +16,7 @@ from common_functions import (
     get_elapsed_time,
     sql_match,
     get_parsed_args,
+    multi_process_setup,
 )
 from typing import Any, Tuple, Dict
 from common_constants import Defaults, Environments
@@ -146,12 +150,46 @@ def run_queries_on_bedrock(
             )
 
 
-def run_inferences(args: Dict, model_instructions: Dict) -> None:
+async def multi_process(
+    instruction_size: int, datasets_info: list, model_name: str, args: Any
+) -> None:
+
+    system_prompt = initialize_system_prompt(instruction_size)
+    bedrock_runtime_client = initialize_amz_bedrock()
+    for dataset_length, query_list, gold_file_list in datasets_info:
+        model_file_path = f"{args.target_dir}/{HOST_ENV}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
+
+        output_file_path, metrics_file_path, log_file_path = initialize_files(
+            model_file_path
+        )
+        print(
+            f"Starting loop for {model_name} - {instruction_size} instructions - {dataset_length} inferences"
+        )
+        loop_start_time = datetime.now()
+        run_queries_on_bedrock(
+            query_list,
+            output_file_path,
+            metrics_file_path,
+            log_file_path,
+            model_name,
+            system_prompt,
+            bedrock_runtime_client,
+            instruction_size,
+            dataset_length,
+        )
+        generate_gold_file(gold_file_list, model_file_path)
+        loop_end_time = datetime.now()
+        total_secs = (loop_end_time - loop_start_time).total_seconds()
+        print(
+            f"Time taken for {dataset_length} records: {get_elapsed_time(total_secs)}"
+        )
+
+async def main():
+    args, model_instructions = get_parsed_args(supported_models, HOST_ENV)
     inference_length_in_args = [int(inst) for inst in args.inf_length.split(",")]
     dataset_length_list = inference_length_in_args or Defaults.INFERENCE_LENGTH_LIST
 
     datasets_info = get_datasets_info(dataset_length_list)
-    bedrock_runtime_client = initialize_amz_bedrock()
 
     for model_name_from_args in args.models.split(","):
         if model_instructions:
@@ -162,41 +200,9 @@ def run_inferences(args: Dict, model_instructions: Dict) -> None:
             instruction_size_list = Defaults.INSTRUCTION_SIZE_LIST
 
         model_name = supported_models[model_name_from_args]
-
-        for instruction_size in instruction_size_list:
-            system_prompt = initialize_system_prompt(instruction_size)
-
-            for dataset_length, query_list, gold_file_list in datasets_info:
-                model_file_path = f"{args.target_dir}/{HOST_ENV}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
-
-                output_file_path, metrics_file_path, log_file_path = initialize_files(
-                    model_file_path
-                )
-
-                print(
-                    f"Starting loop for {model_name} - {instruction_size} instructions - {dataset_length} inferences"
-                )
-                loop_start_time = datetime.now()
-                run_queries_on_bedrock(
-                    query_list,
-                    output_file_path,
-                    metrics_file_path,
-                    log_file_path,
-                    model_name,
-                    system_prompt,
-                    bedrock_runtime_client,
-                    instruction_size,
-                    dataset_length,
-                )
-                generate_gold_file(gold_file_list, model_file_path)
-                loop_end_time = datetime.now()
-                total_secs = (loop_end_time - loop_start_time).total_seconds()
-                print(
-                    f"Time taken for {dataset_length} records: {get_elapsed_time(total_secs)}"
-                )
-
+        await multi_process_setup(
+            multi_process, instruction_size_list, datasets_info, model_name, args
+        )
 
 if __name__ == "__main__":
-    args, model_instructions = get_parsed_args(supported_models, HOST_ENV)
-
-    run_inferences(args, model_instructions)
+    asyncio.run(main())

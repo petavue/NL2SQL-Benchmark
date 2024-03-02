@@ -3,7 +3,6 @@ nohup.out
 *.pyc
 
 # generated files
-predicted.txt
 metrics.csv
-gold.txt
+*.txt
 execution-log.jsonl

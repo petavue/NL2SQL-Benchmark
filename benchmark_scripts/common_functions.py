@@ -1,6 +1,9 @@
 import pandas as pd
 import os
 import math
+import asyncio
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 import re
 import argparse
 from typing import Any, List, Tuple, Dict
@@ -9,6 +12,33 @@ import pathlib
 
 CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
 
+def async_wrapper(
+    multi_process:Any, 
+    instruction_size:int, 
+    datasets_info:list, 
+    model_name:str, 
+    args:Any
+    )->None:
+    loop = asyncio.get_event_loop()
+    result = loop.run_until_complete(multi_process(instruction_size, datasets_info, model_name, args))
+    return result
+
+async def multi_process_setup(
+    multi_process:Any,
+    instruction_size_list:list, 
+    datasets_info:list, 
+    model_name:str, 
+    args:Any
+    )->None:
+    loop = asyncio.get_running_loop()
+    tasks = []
+
+    with ProcessPoolExecutor() as executor:
+        for instruction_size in instruction_size_list:
+            partial_func = partial(async_wrapper,multi_process, instruction_size, datasets_info, model_name, args)
+            tasks.append(loop.run_in_executor(executor, partial_func))
+        for done in asyncio.as_completed(tasks):
+            result = await done
 
 def get_datasets_info(
     dataset_length_list: List[int],
