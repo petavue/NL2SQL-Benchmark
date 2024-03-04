@@ -1,19 +1,71 @@
 import pandas as pd
 import os
 import math
+import asyncio
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 import re
 import argparse
-from typing import Any, List, Tuple, Dict
+from typing import Any, List, Tuple, Dict, Callable
 import json
 from ast import literal_eval
+import pathlib
+
+CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
+
+
+def async_wrapper(
+    multi_process: Callable,
+    instruction_size: int,
+    datasets_info: list,
+    model_name: str,
+    shot_size_list,
+    target_dir: str,
+) -> Any:
+    loop = asyncio.get_event_loop()
+    result = loop.run_until_complete(
+        multi_process(
+            instruction_size,
+            datasets_info,
+            model_name,
+            shot_size_list,
+            target_dir,
+        )
+    )
+    return result
+
+
+async def multi_process_setup(
+    multi_process: Any,
+    instruction_size_list: list,
+    datasets_info: list,
+    model_name: str,
+    shot_size_list: List[str],
+    target_dir: str,
+) -> None:
+    loop = asyncio.get_running_loop()
+    tasks = []
+
+    with ProcessPoolExecutor() as executor:
+        for instruction_size in instruction_size_list:
+            partial_func = partial(
+                async_wrapper,
+                multi_process,
+                instruction_size,
+                datasets_info,
+                model_name,
+                shot_size_list,
+                target_dir,
+            )
+            tasks.append(loop.run_in_executor(executor, partial_func))
+        for done in asyncio.as_completed(tasks):
+            await done
 
 
 def get_datasets_info(
     dataset_length_list: List[int],
-    shot_size_list: List[int],):
-# ) -> Tuple[List[Tuple[int, Any, Tuple[str, str]]], Tuple[Tuple[List[Dict]]]]:
+) -> Tuple[List, List]:
     datasets_info = []
-    shot_info = []
     for dataset_length in dataset_length_list:
         output_file_path = (
             f"../spider_data/spider_equal_split_{str(dataset_length)}.csv"
@@ -28,32 +80,44 @@ def get_datasets_info(
                 spider_data_frame.db_id,
             )
         )
-        gold_file_list = (spider_data_frame.sql_query, spider_data_frame.db_id)
+        gold_file_list = (spider_data_frame["sql_query"], spider_data_frame["db_id"])
 
         datasets_info.append((dataset_length, query_list, gold_file_list))
 
-        for shot_size in shot_size_list:
-            if shot_size==0:
-                continue
-
-            with open(f"../spider_data/{str(dataset_length)}_inferences_{shot_size}_samples.txt") as samples_file:
-                contents = samples_file.read()
-                few_shot_samples = literal_eval(contents)
-                shot_info.append((dataset_length,shot_size ,few_shot_samples))
-        
-
-    return (datasets_info, shot_info)
+    return datasets_info
 
 
-def get_few_shot_sample_string(few_shot_sample: List[Dict], prompt: str) -> str:
-    parsed_str = list(
-        map(
-            lambda sample_dict: f"\n    Q: {sample_dict['question']}\n    A: {sample_dict['sql_query']}",
-            few_shot_sample,
+def get_shot_samples_data(file_shot_size: str) -> List:
+    with open(f"../spider_data/spider_{file_shot_size}_samples.txt") as samples_file:
+        contents = samples_file.read()
+        few_shot_samples = literal_eval(contents)
+
+    return few_shot_samples
+
+
+def get_few_shot_sample_string(shot_size: str, db_id: str, prompt: str) -> str:
+    if shot_size == "0_shot":
+        return prompt.replace("[examples]", "")
+
+    few_shot_sample_dict = get_shot_samples_data(shot_size)
+    samples_list = few_shot_sample_dict[db_id]
+
+    if "cot" in shot_size:
+        parsed_str = list(
+            map(
+                lambda sample_dict: f"\n    Q: {sample_dict['question']}\n    A: {sample_dict['sql_query']}\n    Explanation: \n{sample_dict['cot']}\n",
+                samples_list,
+            )
         )
-    )
-    returned_str = prompt.replace("[examples]", "".join(parsed_str))
-    return returned_str
+    else:
+        parsed_str = list(
+            map(
+                lambda sample_dict: f"\n    Q: {sample_dict['question']}\n    A: {sample_dict['sql_query']}",
+                samples_list,
+            )
+        )
+    samples_prompt = prompt.replace("[examples]", "".join(parsed_str))
+    return samples_prompt
 
 
 def initialize_system_prompt(instruction_size: int) -> str:
@@ -201,6 +265,13 @@ def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any, Dict]:
             "A comma separated list of inferences to include for each results, currently supported shot size: "
             "2,4,6,8. The models specifed will run inferences for these infernce-lengths alone"
         ),
+    )
+    parser.add_argument(
+        "--target-directory",
+        type=str,
+        dest="target_dir",
+        default=CURRENT_FILE_PATH,
+        help="Name of the directory to store the compressed file",
     )
 
     parsed_args = parser.parse_args()
@@ -394,65 +465,44 @@ def sql_match(sql_string: str) -> Tuple[bool, str]:
         ">=",
         "<=",
     ]
+    sql_keyword_dict = {word: True for word in sql_keywords}
     answer = ""
     words = processed_str.split()
     for idx1 in range(len(words)):
         flag = 0
         if words[idx1].lower() == "from":
             for idx2 in range(idx1, len(words)):
-                choice = 0
-                for keyword in sql_keywords:
-                    if words[idx2] == keyword:
-                        choice = 1
-                        answer += words[idx2]
-                        answer += " "
-                        break
-                if choice == 1:
-                    continue
+                if words[idx2] in sql_keyword_dict:
+                    answer += words[idx2] + " "
+
                 else:
                     if (idx2 + 1) >= len(words):
-                        answer += words[idx2]
-                        answer += " "
+                        answer += words[idx2] + " "
                         continue
                     if len(words[idx2 + 1]) == 1:
-                        answer += words[idx2]
-                        answer += " "
+                        answer += words[idx2] + " "
                         continue
-                    for key in sql_keywords:
-                        if words[idx2 + 1] == key:
-                            choice = 1
-                            answer += words[idx2]
-                            answer += " "
-                            break
-                    if choice == 1:
-                        continue
+                    if words[idx2 + 1] in sql_keyword_dict:
+                        answer += words[idx2] + " "
                     else:
                         if (idx2 + 2) >= len(words):
-                            answer += words[idx2]
-                            answer += " "
+                            answer += words[idx2] + " "
                             continue
                         if len(words[idx2 + 2]) == 1:
-                            answer += words[idx2]
-                            answer += " "
+                            answer += words[idx2] + " "
                             continue
-                        for keyword in sql_keywords:
-                            if words[idx2 + 2] == keyword:
-                                choice = 1
-                                answer += words[idx2]
-                                answer += " "
-                                break
-                        if choice == 0:
+                        if words[idx2 + 2] in sql_keyword_dict:
+                            answer += words[idx2] + " "
+                        else:
                             flag = 1
                             if words[idx2 - 1].lower() != "end":
-                                answer += words[idx2]
-                                answer += " "
+                                answer += words[idx2] + " "
                             break
                 if flag == 1:
                     break
             break
         else:
             answer += words[idx1]
-            answer += " "
 
     if answer == processed_str:
         return (False, answer)
