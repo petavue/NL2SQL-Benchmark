@@ -137,7 +137,7 @@ def run_queries_on_model(
                 system_prompt = system_prompt.replace("[context]", context).replace(
                     "[question]", ""
                 )
-                prompt = f"role: system\n {system_prompt}\n\n   role: system\n {question}   role: user\nDestination: system"
+                prompt = f"<s>Source: system\n\n {system_prompt}\n\n <step>  Source: user\n {question} <step> Source: user\nDestination: system\n\n"
             elif model_name in [
                 MODEL_MISTRALAI_MISTRAL_7B,
                 MODEL_MISTRALAI_MIXTRAL_8X7B,
@@ -145,11 +145,19 @@ def run_queries_on_model(
                 system_prompt = system_prompt.replace("[context]", context).replace(
                     "[question]", ""
                 )
-                prompt = f"role: user\n {system_prompt}\n\n   role: user\n {question}  role: assistant\nDestination: user"
-            else:
-                prompt = system_prompt.replace("[context]", context).replace(
-                    "[question]", question
+                prompt = f"<s> [INST] {system_prompt} QUESTION: {question}  [/INST]</s>"
+            elif model_name in [MODEL_DEFOG_SQLCODER_70B ,MODEL_DEFOG_SQLCODER_7B_2]:
+                system_prompt = system_prompt.replace("[context]", context).replace(
+                    "[question]", ""
                 )
+                prompt = f"### Task \nGenerate a SQL query to answer [QUESTION]{question}[/QUESTION]### Database Schema \nThe query will run on a database with the following schema:{system_prompt} ### Answer \nGiven the database schema, here is the SQL query that [QUESTION]{question}[/QUESTION] \n[SQL]"
+
+            elif model_name in [MODEL_WIZARDLM_WIZARD_CODER_33B]:
+                system_prompt = system_prompt.replace("[context]", context).replace(
+                    "[question]", ""
+                )
+                prompt = f"Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{system_prompt} QUESTION: {question} \n\n### Response:"
+
 
             prompt_list.append(prompt)
 
