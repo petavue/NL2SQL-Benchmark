@@ -25,7 +25,7 @@ from common_functions import (
     generate_model_specific_prompt_for_self_hosted_model,
 )
 from typing import Tuple, Any
-from common_constants import Defaults, Environments, SelfHostedModels
+from common_constants import Defaults, Environments, SelfHostedModels, SelfHosted
 
 CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
 
@@ -63,7 +63,7 @@ def initialize_model_and_tokenizer(
 ) -> Tuple[PreTrainedTokenizer | PreTrainedTokenizerFast, Any]:
     # Create tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
-        model_name, cache_dir="./model/", token=auth_token
+        model_name, cache_dir=SelfHosted.MODEL_WEIGHTS_DIRECTORY, token=auth_token
     )
 
     if model_name in [
@@ -74,7 +74,7 @@ def initialize_model_and_tokenizer(
             model_name,
             device_map="auto",
             max_memory={0: "40GB", 1: "40GB", 2: "40GB", 3: "80GB"},
-            cache_dir="./model/",
+            cache_dir=SelfHosted.MODEL_WEIGHTS_DIRECTORY,
             token=auth_token,
             torch_dtype=model_tensor_types[model_name],
         )
@@ -83,7 +83,7 @@ def initialize_model_and_tokenizer(
             model_name,
             device_map="auto",
             max_memory={0: "40GB", 1: "40GB", 2: "40GB", 3: "80GB"},
-            cache_dir="./model/",
+            cache_dir=SelfHosted.MODEL_WEIGHTS_DIRECTORY,
             token=auth_token,
             torch_dtype=model_tensor_types[model_name],
             rope_scaling={"type": "dynamic", "factor": 2},

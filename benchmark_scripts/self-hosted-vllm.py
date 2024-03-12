@@ -17,7 +17,7 @@ from common_functions import (
     generate_model_specific_prompt_for_self_hosted_model,
 )
 from typing import Tuple
-from common_constants import Defaults, Environments
+from common_constants import Defaults, Environments, SelfHosted
 
 CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
 
@@ -158,7 +158,7 @@ def run_inferences() -> None:
         llm = LLM(
             model=model_name,
             tensor_parallel_size=torch.cuda.device_count(),
-            download_dir="../model-weights/",
+            download_dir=SelfHosted.MODEL_WEIGHTS_DIRECTORY,
             enforce_eager=args.enforce_eager,
         )
         if args.use_beam_search:

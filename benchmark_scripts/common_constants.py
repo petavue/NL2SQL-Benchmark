@@ -37,3 +37,6 @@ class SelfHostedModels:
     MODEL_WIZARDLM_WIZARD_CODER_33B = "WizardLM/WizardCoder-33B-V1.1"
     MODEL_DEFOG_SQLCODER_70B = "defog/sqlcoder-70b-alpha"
     MODEL_DEFOG_SQLCODER_7B_2 = "defog/sqlcoder-7b-2"
+
+class SelfHosted:
+    MODEL_WEIGHTS_DIRECTORY = "../model-weights/"
