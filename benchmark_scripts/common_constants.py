@@ -1,9 +1,11 @@
 class Defaults:
     INFERENCE_LENGTH_LIST = [50, 100, 200, 400]
     INSTRUCTION_SIZE_LIST = [5, 7, 9, 11, 13]
+    MAX_TOKENS_TO_GENERATE = 300
 
 
 class Environments:
+    OPEN_AI = "open-ai"
     ANYSCALE = "anyscale"
     AMZ_BEDROCK = "amazon-bedrock"
     SELF_HOSTED = "self-hosted"
@@ -15,9 +17,23 @@ class BedrockModels:
     MODEL_ANTHROPIC_CLAUDE = "anthropic.claude-v2"
 
 
+class OpenAIModels:
+    MODEL_GPT_3 = "gpt-3.5-turbo-16k"
+    MODEL_GPT_4 = "gpt-4-turbo-preview"
+
+
 class AnyscaleModels:
     MODEL_META_LLAMA = "meta-llama/Llama-2-70b-chat-hf"
+    MODEL_META_CODELLAMA_70B = "codellama/CodeLlama-70b-Instruct-hf"
+    MODEL_MISTRALAI_MISTRAL_7B = "mistralai/Mistral-7B-Instruct-v0.1"
+    MODEL_MISTRALAI_MIXTRAL_8X7B = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+
+
+class SelfHostedModels:
     MODEL_META_CODELLAMA_70B = "codellama/CodeLlama-70b-Instruct-hf"
     MODEL_META_CODELLAMA_34B = "codellama/CodeLlama-34b-Instruct-hf"
     MODEL_MISTRALAI_MISTRAL_7B = "mistralai/Mistral-7B-Instruct-v0.1"
     MODEL_MISTRALAI_MIXTRAL_8X7B = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+    MODEL_WIZARDLM_WIZARD_CODER_33B = "WizardLM/WizardCoder-33B-V1.1"
+    MODEL_DEFOG_SQLCODER_70B = "defog/sqlcoder-70b-alpha"
+    MODEL_DEFOG_SQLCODER_7B_2 = "defog/sqlcoder-7b-2"

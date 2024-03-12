@@ -6,8 +6,7 @@ from datetime import datetime
 import pathlib
 from common_functions import (
     get_datasets_info,
-    get_few_shot_sample_string,
-    initialize_system_prompt,
+    get_instruction_shot_specific_prompt,
     initialize_files,
     generate_gold_file,
     write_to_file,
@@ -18,7 +17,7 @@ from common_functions import (
     multi_process_setup,
 )
 from typing import Any, Tuple, List
-from common_constants import Defaults, Environments
+from common_constants import Defaults, Environments, BedrockModels
 
 CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
 
@@ -30,12 +29,9 @@ HOST_ENV = Environments.AMZ_BEDROCK
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 
-MODEL_META_LLAMA = "meta.llama2-70b-chat-v1"
-MODEL_ANTHROPIC_CLAUDE = "anthropic.claude-v2"
-
 supported_models = {
-    "claude": MODEL_ANTHROPIC_CLAUDE,
-    "llama": MODEL_META_LLAMA,
+    "claude": BedrockModels.MODEL_ANTHROPIC_CLAUDE,
+    "llama": BedrockModels.MODEL_META_LLAMA,
 }
 
 
@@ -70,20 +66,19 @@ def run_queries_on_bedrock(
                 "is_sql": 0,
             }
 
-            instructions_prompt = initialize_system_prompt(instruction_size)
-            system_prompt = get_few_shot_sample_string(
-                shot_size, db_id, instructions_prompt
+            system_prompt = get_instruction_shot_specific_prompt(
+                instruction_size, shot_size, db_id
             )
 
             prompt = system_prompt.replace("[context]", context).replace(
                 "[question]", question
             )
-            if model_name == MODEL_ANTHROPIC_CLAUDE:
+            if model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE:
                 prompt = f"\n\nHuman: {prompt}\n\nAssistant:"
 
             body = {"prompt": prompt}
 
-            if model_name == MODEL_ANTHROPIC_CLAUDE:
+            if model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE:
                 body["max_tokens_to_sample"] = 3000
 
             data_to_log["request"] = body
@@ -111,7 +106,7 @@ def run_queries_on_bedrock(
                 "x-amzn-bedrock-input-token-count"
             ]
 
-            if model_name == MODEL_ANTHROPIC_CLAUDE:
+            if model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE:
                 llm_response_content = response_body["completion"]
             else:
                 llm_response_content = response_body["generation"]

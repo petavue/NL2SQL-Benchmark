@@ -9,12 +9,11 @@ from transformers import (
 )
 import torch
 from datetime import datetime
-from vllm import LLM, SamplingParams
 import os
+import asyncio
 import pathlib
 from common_functions import (
     get_datasets_info,
-    initialize_system_prompt,
     initialize_files,
     generate_gold_file,
     write_to_file,
@@ -22,10 +21,11 @@ from common_functions import (
     get_elapsed_time,
     sql_match,
     get_parsed_args,
-    get_few_shot_sample_string,
+    get_instruction_shot_specific_prompt,
+    generate_model_specific_prompt_for_self_hosted_model,
 )
-from typing import Tuple, Dict, Any
-from common_constants import Defaults, Environments
+from typing import Tuple, Any
+from common_constants import Defaults, Environments, SelfHostedModels
 
 CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
 
@@ -36,42 +36,40 @@ HOST_ENV = Environments.SELF_HOSTED
 # Get environment variables
 auth_token = os.getenv("HUGGING_FACE_TOKEN")
 
-MODEL_META_CODELLAMA_70B = "codellama/CodeLlama-70b-Instruct-hf"
-MODEL_META_CODELLAMA_34B = "codellama/CodeLlama-34b-Instruct-hf"
-MODEL_MISTRALAI_MISTRAL_7B = "mistralai/Mistral-7B-Instruct-v0.1"
-MODEL_MISTRALAI_MIXTRAL_8X7B = "mistralai/Mixtral-8x7B-Instruct-v0.1"
-MODEL_WIZARDLM_WIZARD_CODER_33B = "WizardLM/WizardCoder-33B-V1.1"
-MODEL_DEFOG_SQLCODER_70B = "defog/sqlcoder-70b-alpha"
-MODEL_DEFOG_SQLCODER_7B_2 = "defog/sqlcoder-7b-2"
 
 supported_models = {
-    "cl-70": MODEL_META_CODELLAMA_70B,
-    "cl-34": MODEL_META_CODELLAMA_34B,
-    "mistral": MODEL_MISTRALAI_MISTRAL_7B,
-    "mixtral": MODEL_MISTRALAI_MIXTRAL_8X7B,
-    "wc-33": MODEL_WIZARDLM_WIZARD_CODER_33B,
-    "sqlc-70-a": MODEL_DEFOG_SQLCODER_70B,
-    "sqlc-7-2": MODEL_DEFOG_SQLCODER_7B_2,
+    "cl-70": SelfHostedModels.MODEL_META_CODELLAMA_70B,
+    "cl-34": SelfHostedModels.MODEL_META_CODELLAMA_34B,
+    "mistral": SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B,
+    "mixtral": SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X7B,
+    "wc-33": SelfHostedModels.MODEL_WIZARDLM_WIZARD_CODER_33B,
+    "sqlc-70-a": SelfHostedModels.MODEL_DEFOG_SQLCODER_70B,
+    "sqlc-7-2": SelfHostedModels.MODEL_DEFOG_SQLCODER_7B_2,
 }
 
 model_tensor_types = {
-    MODEL_DEFOG_SQLCODER_70B: torch.float16,
-    MODEL_DEFOG_SQLCODER_7B_2: torch.float16,
-    MODEL_META_CODELLAMA_70B: torch.bfloat16,
-    MODEL_META_CODELLAMA_34B: torch.bfloat16,
-    MODEL_MISTRALAI_MISTRAL_7B: torch.bfloat16,
-    MODEL_MISTRALAI_MIXTRAL_8X7B: torch.bfloat16,
-    MODEL_WIZARDLM_WIZARD_CODER_33B: torch.bfloat16,
+    SelfHostedModels.MODEL_DEFOG_SQLCODER_70B: torch.float16,
+    SelfHostedModels.MODEL_DEFOG_SQLCODER_7B_2: torch.float16,
+    SelfHostedModels.MODEL_META_CODELLAMA_70B: torch.bfloat16,
+    SelfHostedModels.MODEL_META_CODELLAMA_34B: torch.bfloat16,
+    SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B: torch.bfloat16,
+    SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X7B: torch.bfloat16,
+    SelfHostedModels.MODEL_WIZARDLM_WIZARD_CODER_33B: torch.bfloat16,
 }
 
 
-def initialize_model_and_tokenizer(model_name):
+def initialize_model_and_tokenizer(
+    model_name: str,
+) -> Tuple[PreTrainedTokenizer | PreTrainedTokenizerFast, Any]:
     # Create tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
         model_name, cache_dir="./model/", token=auth_token
     )
 
-    if model_name in [MODEL_MISTRALAI_MISTRAL_7B, MODEL_MISTRALAI_MIXTRAL_8X7B]:
+    if model_name in [
+        SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B,
+        SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X7B,
+    ]:
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
             device_map="auto",
@@ -106,7 +104,7 @@ def test_model(tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, model: 
 
     # Actually run the thing
     output = model.generate(
-        **inputs, streamer=streamer, use_cache=True, max_new_tokens=300
+        **inputs, streamer=streamer, use_cache=True, max_new_tokens=Defaults.MAX_TOKENS_TO_GENERATE
     )
 
     # Covert the output tokens back to text
@@ -122,47 +120,12 @@ def run_queries_on_model(
     instruction_size: int,
     dataset_length: int,
     shot_size: str,
-    llm: LLM,
-    sampling_params: SamplingParams,
+    model: Any,
+    tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
 ) -> None:
-    try:
-        prompt_list = []
-        for context, question, hardness, db_id in total_user_query[0:5]:
-            instructions_prompt = initialize_system_prompt(instruction_size)
-            system_prompt = get_few_shot_sample_string(
-                shot_size, db_id, instructions_prompt
-            )
-
-            if model_name == MODEL_META_CODELLAMA_70B:
-                system_prompt = system_prompt.replace("[context]", context).replace(
-                    "[question]", ""
-                )
-                prompt = f"<s>Source: system\n\n {system_prompt}\n\n <step>  Source: user\n {question} <step> Source: user\nDestination: system\n\n"
-            elif model_name in [
-                MODEL_MISTRALAI_MISTRAL_7B,
-                MODEL_MISTRALAI_MIXTRAL_8X7B,
-            ]:
-                system_prompt = system_prompt.replace("[context]", context).replace(
-                    "[question]", ""
-                )
-                prompt = f"<s> [INST] {system_prompt} QUESTION: {question}  [/INST]</s>"
-            elif model_name in [MODEL_DEFOG_SQLCODER_70B ,MODEL_DEFOG_SQLCODER_7B_2]:
-                system_prompt = system_prompt.replace("[context]", context).replace(
-                    "[question]", ""
-                )
-                prompt = f"### Task \nGenerate a SQL query to answer [QUESTION]{question}[/QUESTION]### Database Schema \nThe query will run on a database with the following schema:{system_prompt} ### Answer \nGiven the database schema, here is the SQL query that [QUESTION]{question}[/QUESTION] \n[SQL]"
-
-            elif model_name in [MODEL_WIZARDLM_WIZARD_CODER_33B]:
-                system_prompt = system_prompt.replace("[context]", context).replace(
-                    "[question]", ""
-                )
-                prompt = f"Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{system_prompt} QUESTION: {question} \n\n### Response:"
-
-
-            prompt_list.append(prompt)
-
-        vllm_output_list = llm.generate(prompt_list, sampling_params)
-        for vllm_output in vllm_output_list:
+    for context, question, hardness, db_id in total_user_query:
+        torch.cuda.empty_cache()
+        try:
             data_to_log = {
                 "environment": HOST_ENV,
                 "model": model_name,
@@ -171,12 +134,81 @@ def run_queries_on_model(
                 "severity": "info",
                 "is_sql": 0,
             }
-            llm_prompt_tokens = len(vllm_output.prompt_token_ids)
-            llm_response_content = vllm_output.outputs[0].text
-            llm_response_tokens = len(vllm_output.outputs[0].token_ids)
 
-            data_to_log["response"] = str(vllm_output)
-            data_to_log["request"] = str(vllm_output.prompt)
+            system_prompt = get_instruction_shot_specific_prompt(
+                instruction_size, shot_size, db_id
+            )
+            prompt = generate_model_specific_prompt_for_self_hosted_model(
+                model_name, system_prompt, context, question
+            )
+
+            # if model_name in [
+            #     SelfHostedModels.MODEL_META_CODELLAMA_70B,
+            #     SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B,
+            #     SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X7B,
+            # ]:
+            #     if model_name == SelfHostedModels.MODEL_META_CODELLAMA_70B:
+            #         prompt = [
+            #             {
+            #                 "role": "system",
+            #                 "content": system_prompt.replace(
+            #                     "[context]", context
+            #                 ).replace("[question]", ""),
+            #             },
+            #             {"role": "user", "content": question},
+            #         ]
+            #     else:
+            #         prompt = [
+            #             {
+            #                 "role": "user",
+            #                 "content": system_prompt.replace(
+            #                     "[context]", context
+            #                 ).replace("[question]", ""),
+            #             },
+            #             {"role": "assistant", "content": question},
+            #         ]
+            #     data_to_log["request"] = prompt
+
+            #     inputs = tokenizer.apply_chat_template(prompt, return_tensors="pt").to(
+            #         "cuda"
+            #     )
+            #     llm_prompt_tokens = len(inputs)
+
+            #     response_time_start = datetime.now()
+            #     output = model.generate(
+            #         input_ids=inputs,
+            #         use_cache=True,
+            #         max_new_tokens=300,
+            #         pad_token_id=tokenizer.eos_token_id,
+            #     )
+            #     response_time_stop = datetime.now()
+            # else:
+            # prompt = system_prompt.replace("[context]", context).replace(
+            #     "[question]", question
+            # )
+
+            data_to_log["request"] = prompt
+            inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+            llm_prompt_tokens = len(inputs)
+
+            # Setup the text streamer
+            streamer = TextStreamer(
+                tokenizer, skip_prompt=True, skip_special_tokens=True
+            )
+
+            response_time_start = datetime.now()
+            output = model.generate(
+                **inputs,
+                streamer=streamer,
+                use_cache=True,
+                max_new_tokens=Defaults.MAX_TOKENS_TO_GENERATE,
+                pad_token_id=tokenizer.eos_token_id,
+            )
+            response_time_stop = datetime.now()
+
+            llm_response_content = tokenizer.decode(output[0], skip_special_tokens=True)
+            llm_response_tokens = len(output[0])
+            data_to_log["response"] = llm_response_content
 
             if "select" in llm_response_content.lower():
                 is_sql_match, sql_response = sql_match(llm_response_content)
@@ -198,27 +230,28 @@ def run_queries_on_model(
             data_to_log["sql_response"] = sql_response
             log("SQL Response successful", data_to_log, log_file_path)
 
-            output_metrics = vllm_output.metrics
-            response_time = output_metrics.finished_time - output_metrics.arrival_time
+            response_time = response_time_stop - response_time_start
             write_to_file(
                 output_file_path,
                 metrics_file_path,
                 f"{sql_response}\n\n",
                 f"{response_time},{llm_prompt_tokens},{llm_response_tokens},{hardness}\n",
             )
-    except Exception as ex:
-        data_to_log["severity"] = "error"
-        log(ex, data_to_log, log_file_path)
-        print("exception: ", ex)
-        write_to_file(
-            output_file_path,
-            metrics_file_path,
-            f"An error occurred: {ex}\n\n",
-            f"{0},{0},{0},{hardness}\n",
-        )
+        except Exception as ex:
+            data_to_log["severity"] = "error"
+            log(ex, data_to_log, log_file_path)
+            print("exception: ", ex)
+            write_to_file(
+                output_file_path,
+                metrics_file_path,
+                f"An error occurred: {ex}\n\n",
+                f"{0},{0},{0},{hardness}\n",
+            )
 
 
-def run_inferences() -> None:
+async def run_inferences(
+    instruction_size: int, datasets_info: list, model_name: str, args: Any
+) -> None:
     args, model_instructions = get_parsed_args(supported_models, HOST_ENV)
     inference_length_in_args = [int(inst) for inst in args.inf_length.split(",")]
     dataset_length_list = inference_length_in_args or Defaults.INFERENCE_LENGTH_LIST
@@ -235,52 +268,45 @@ def run_inferences() -> None:
             instruction_size_list = Defaults.INSTRUCTION_SIZE_LIST
 
         model_name = supported_models[model_name_from_args]
+        tokenizer, model = initialize_model_and_tokenizer(model_name)
 
-    llm = LLM(
-        model=model_name,
-        tensor_parallel_size=torch.cuda.device_count(),
-        download_dir="./model/",
-        enforce_eager=True,
-    )
-    sampling_params = SamplingParams(max_tokens=300)
+        for shot_size in shot_size_list:
+            if "cot" in shot_size:
+                file_shot_size = shot_size.split("-")[0] + "_shot_cot"
+            else:
+                file_shot_size = shot_size + "_shot"
 
-    for shot_size in shot_size_list:
-        if "cot" in shot_size:
-            file_shot_size = shot_size.split("-")[0] + "_shot_cot"
-        else:
-            file_shot_size = shot_size + "_shot"
+            for instruction_size in instruction_size_list:
+                for dataset_length, query_list, gold_file_list in datasets_info:
+                    model_file_path = f"{args.target_dir}/{HOST_ENV}/{file_shot_size}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
 
-        for instruction_size in instruction_size_list:
-            for dataset_length, query_list, gold_file_list in datasets_info:
-                model_file_path = f"{args.target_dir}/{HOST_ENV}/{file_shot_size}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
+                    output_file_path, metrics_file_path, log_file_path = (
+                        initialize_files(model_file_path)
+                    )
 
-                output_file_path, metrics_file_path, log_file_path = initialize_files(
-                    model_file_path
-                )
-
-                print(
-                    f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences"
-                )
-                loop_start_time = datetime.now()
-                run_queries_on_model(
-                    query_list,
-                    output_file_path,
-                    metrics_file_path,
-                    log_file_path,
-                    model_name,
-                    instruction_size,
-                    dataset_length,
-                    file_shot_size,
-                    llm,
-                    sampling_params,
-                )
-                generate_gold_file(gold_file_list, model_file_path)
-                loop_end_time = datetime.now()
-                total_secs = (loop_end_time - loop_start_time).total_seconds()
-                print(
-                    f"Time taken for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences: {get_elapsed_time(total_secs)}"
-                )
+                    print(
+                        f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences"
+                    )
+                    loop_start_time = datetime.now()
+                    run_queries_on_model(
+                        query_list,
+                        output_file_path,
+                        metrics_file_path,
+                        log_file_path,
+                        model_name,
+                        instruction_size,
+                        dataset_length,
+                        file_shot_size,
+                        model,
+                        tokenizer,
+                    )
+                    generate_gold_file(gold_file_list, model_file_path)
+                    loop_end_time = datetime.now()
+                    total_secs = (loop_end_time - loop_start_time).total_seconds()
+                    print(
+                        f"Time taken for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences: {get_elapsed_time(total_secs)}"
+                    )
 
 
 if __name__ == "__main__":
-    run_inferences()
+    asyncio.run(run_inferences())

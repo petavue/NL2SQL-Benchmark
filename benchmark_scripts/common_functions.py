@@ -10,6 +10,7 @@ from typing import Any, List, Tuple, Dict, Callable
 import json
 from ast import literal_eval
 import pathlib
+from common_constants import SelfHostedModels, Environments
 
 CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
 
@@ -120,6 +121,50 @@ def get_few_shot_sample_string(shot_size: str, db_id: str, prompt: str) -> str:
     return samples_prompt
 
 
+def get_instruction_shot_specific_prompt(
+    instruction_size: int, shot_size: str, db_id: str
+) -> str:
+    instructions_prompt = initialize_system_prompt(instruction_size)
+    return get_few_shot_sample_string(shot_size, db_id, instructions_prompt)
+
+
+def generate_model_specific_prompt_for_self_hosted_model(
+    model_name: str, system_prompt: str, context: str, question: str
+) -> str:
+    if model_name == SelfHostedModels.MODEL_META_CODELLAMA_70B:
+        system_prompt = system_prompt.replace("[context]", context).replace(
+            "[question]", ""
+        )
+        prompt = f"<s>Source: system\n\n {system_prompt} <step> Source: user\n\n {question} <step> Source: assistant\nDestination: user\n\n "
+    elif model_name == SelfHostedModels.MODEL_WIZARDLM_WIZARD_CODER_33B:
+        system_prompt = system_prompt.replace("[context]", context).replace(
+            "[question]", ""
+        )
+        prompt = f"Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{system_prompt} QUESTION: {question} \n\n### Response:"
+    elif model_name in [
+        SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B,
+        SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X7B,
+    ]:
+        system_prompt = system_prompt.replace("[context]", context).replace(
+            "[question]", question
+        )
+        prompt = f"<s> [INST] {system_prompt} [/INST]"
+    elif model_name in [
+        SelfHostedModels.MODEL_DEFOG_SQLCODER_70B,
+        SelfHostedModels.MODEL_DEFOG_SQLCODER_7B_2,
+    ]:
+        system_prompt = system_prompt.replace("[context]", context).replace(
+            "[question]", ""
+        )
+        prompt = f"### Task \nGenerate a SQL query to answer [QUESTION]{question}[/QUESTION]### Database Schema \nThe query will run on a database with the following schema:{system_prompt} ### Answer \nGiven the database schema, here is the SQL query that [QUESTION]{question}[/QUESTION] \n[SQL]"
+    else:
+        prompt = system_prompt.replace("[context]", context).replace(
+            "[question]", question
+        )
+
+    return prompt
+
+
 def initialize_system_prompt(instruction_size: int) -> str:
     INSTRUCTIONS_6_TO_7 = """
     6. Spend time to get the right databases,tables,and columns required for the question
@@ -155,9 +200,9 @@ def initialize_system_prompt(instruction_size: int) -> str:
     4. Analyse the usage of JOINS if required between two or more tables. 
     5. use SQL functions like 'wildcards', 'procedures', 'exists', and 'case' to simplify the query if needed. {extra_instructions}
     
-    [question]
-
     [examples]
+
+    [question]
     """.format(extra_instructions="".join(extra_instruction))
 
 
@@ -270,11 +315,32 @@ def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any, Dict]:
         "--target-directory",
         type=str,
         dest="target_dir",
-        default=CURRENT_FILE_PATH,
+        default=CURRENT_FILE_PATH.parents[1],
         help="Name of the directory to store the compressed file",
     )
+    
+    if host_env == Environments.SELF_HOSTED:
+        parser.add_argument(
+            "--enforce-eager",
+            type=bool,
+            default=False,
+            help="Name of the directory to store the compressed file",
+        )
+        parser.add_argument(
+            "--use-beam-search",
+            type=str,
+            default=False,
+            help="Name of the directory to store the compressed file",
+        )
+        parser.add_argument(
+            "--best_of",
+            type=str,
+            default=4,
+            help="Name of the directory to store the compressed file",
+        )
 
     parsed_args = parser.parse_args()
+    parsed_args.target_dir = str(parsed_args.target_dir) + "/inference_results/"
 
     model_instructions = {}
     if parsed_args.model_instructions:

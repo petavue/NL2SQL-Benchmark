@@ -4,6 +4,7 @@ nohup.out
 *.zip
 
 # generated files
-metrics.csv
-*.txt
+metrics*.csv
+gold.txt
+predicted*.txt
 execution-log.jsonl

@@ -11,3 +11,4 @@ bitsandbytes
 scipy
 xformers
 sentencepiece
+vllm==0.3.3

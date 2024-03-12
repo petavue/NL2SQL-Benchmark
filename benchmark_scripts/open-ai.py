@@ -5,6 +5,7 @@ from openai import AsyncOpenAI
 import asyncio
 from common_functions import (
     get_datasets_info,
+    initialize_system_prompt,
     initialize_files,
     generate_gold_file,
     write_to_file,
@@ -12,31 +13,28 @@ from common_functions import (
     get_elapsed_time,
     sql_match,
     get_parsed_args,
-    get_instruction_shot_specific_prompt,
+    get_few_shot_sample_string,
     multi_process_setup,
 )
 from typing import Tuple, List, Any
-from common_constants import Defaults, Environments, AnyscaleModels
+from common_constants import Defaults, Environments, OpenAIModels
 
 CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
 
 # Set environment variables
 exec(open(f"{CURRENT_FILE_PATH}/../set_env_vars.py").read())
-HOST_ENV = Environments.ANYSCALE
+HOST_ENV = Environments.OPEN_AI
 
 # Get environment variables
-ANY_SCALE_API_KEY = os.getenv("ANY_SCALE_API_KEY")
-ANY_SCALE_BASE_URL = "https://api.endpoints.anyscale.com/v1"
+OPENAI_KEY = os.getenv("OPENAI_KEY")
 
 supported_models = {
-    "cl-70": AnyscaleModels.MODEL_META_CODELLAMA_70B,
-    "mistral": AnyscaleModels.MODEL_MISTRALAI_MISTRAL_7B,
-    "mixtral": AnyscaleModels.MODEL_MISTRALAI_MIXTRAL_8X7B,
-    "llama": AnyscaleModels.MODEL_META_LLAMA,
+    "gpt-4": OpenAIModels.MODEL_GPT_4,
+    "gpt-3": OpenAIModels.MODEL_GPT_3,
 }
 
 
-async def run_queries_on_anyscale(
+async def run_queries_on_open_ai(
     total_user_query: Tuple[str, str, str],
     output_file_path: str,
     metrics_file_path: str,
@@ -58,8 +56,9 @@ async def run_queries_on_anyscale(
                 "is_sql": 0,
             }
 
-            system_prompt = get_instruction_shot_specific_prompt(
-                instruction_size, shot_size, db_id
+            instructions_prompt = initialize_system_prompt(instruction_size)
+            system_prompt = get_few_shot_sample_string(
+                shot_size, db_id, instructions_prompt
             )
 
             req = [
@@ -76,16 +75,16 @@ async def run_queries_on_anyscale(
             ]
             data_to_log["request"] = req
             response_time_start = datetime.now()
-            anyscale_response = await client.chat.completions.create(
+            open_ai_response = await client.chat.completions.create(
                 model=model_name,
                 messages=req,
             )
             response_time_stop = datetime.now()
-            data_to_log["response"] = str(anyscale_response)
+            data_to_log["response"] = str(open_ai_response)
 
-            llm_response_content = anyscale_response.choices[0].message.content
-            llm_response_tokens = anyscale_response.usage.completion_tokens
-            llm_prompt_tokens = anyscale_response.usage.prompt_tokens
+            llm_response_content = open_ai_response.choices[0].message.content
+            llm_response_tokens = open_ai_response.usage.completion_tokens
+            llm_prompt_tokens = open_ai_response.usage.prompt_tokens
 
             if "select" in llm_response_content.lower():
                 is_sql_match, sql_response = sql_match(llm_response_content)
@@ -133,7 +132,7 @@ async def multi_process(
     shot_size_list: List[str],
     target_dir: str,
 ) -> None:
-    client = AsyncOpenAI(api_key=ANY_SCALE_API_KEY, base_url=ANY_SCALE_BASE_URL)
+    client = AsyncOpenAI(api_key=OPENAI_KEY)
 
     for shot_size in shot_size_list:
         if "cot" in shot_size:
@@ -152,7 +151,7 @@ async def multi_process(
                 f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences"
             )
             loop_start_time = datetime.now()
-            await run_queries_on_anyscale(
+            await run_queries_on_open_ai(
                 query_list,
                 output_file_path,
                 metrics_file_path,
