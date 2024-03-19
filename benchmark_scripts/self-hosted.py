@@ -3,14 +3,12 @@
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
-    TextStreamer,
     PreTrainedTokenizer,
     PreTrainedTokenizerFast,
 )
 import torch
 from datetime import datetime
 import os
-import asyncio
 import pathlib
 from common_functions import (
     get_datasets_info,
@@ -196,9 +194,7 @@ def run_queries_on_model(
             )
 
 
-async def run_inferences(
-    instruction_size: int, datasets_info: list, model_name: str, args: Any
-) -> None:
+def run_inferences() -> None:
     args, model_instructions = get_parsed_args(supported_models, HOST_ENV)
     inference_length_in_args = [int(inst) for inst in args.inf_length.split(",")]
     dataset_length_list = inference_length_in_args or Defaults.INFERENCE_LENGTH_LIST
@@ -256,4 +252,4 @@ async def run_inferences(
 
 
 if __name__ == "__main__":
-    asyncio.run(run_inferences())
+    run_inferences()
