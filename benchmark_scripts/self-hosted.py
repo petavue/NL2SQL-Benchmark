@@ -99,12 +99,10 @@ def test_model(tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, model: 
             ### Assistant:"
     # Pass the prompt to the tokenizer
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-    # Setup the text streamer
-    streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
 
     # Actually run the thing
     output = model.generate(
-        **inputs, streamer=streamer, use_cache=True, max_new_tokens=Defaults.MAX_TOKENS_TO_GENERATE
+        **inputs, use_cache=True, max_new_tokens=Defaults.MAX_TOKENS_TO_GENERATE
     )
 
     # Covert the output tokens back to text
@@ -142,64 +140,13 @@ def run_queries_on_model(
                 model_name, system_prompt, context, question
             )
 
-            # if model_name in [
-            #     SelfHostedModels.MODEL_META_CODELLAMA_70B,
-            #     SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B,
-            #     SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X7B,
-            # ]:
-            #     if model_name == SelfHostedModels.MODEL_META_CODELLAMA_70B:
-            #         prompt = [
-            #             {
-            #                 "role": "system",
-            #                 "content": system_prompt.replace(
-            #                     "[context]", context
-            #                 ).replace("[question]", ""),
-            #             },
-            #             {"role": "user", "content": question},
-            #         ]
-            #     else:
-            #         prompt = [
-            #             {
-            #                 "role": "user",
-            #                 "content": system_prompt.replace(
-            #                     "[context]", context
-            #                 ).replace("[question]", ""),
-            #             },
-            #             {"role": "assistant", "content": question},
-            #         ]
-            #     data_to_log["request"] = prompt
-
-            #     inputs = tokenizer.apply_chat_template(prompt, return_tensors="pt").to(
-            #         "cuda"
-            #     )
-            #     llm_prompt_tokens = len(inputs)
-
-            #     response_time_start = datetime.now()
-            #     output = model.generate(
-            #         input_ids=inputs,
-            #         use_cache=True,
-            #         max_new_tokens=300,
-            #         pad_token_id=tokenizer.eos_token_id,
-            #     )
-            #     response_time_stop = datetime.now()
-            # else:
-            # prompt = system_prompt.replace("[context]", context).replace(
-            #     "[question]", question
-            # )
-
             data_to_log["request"] = prompt
             inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
             llm_prompt_tokens = len(inputs)
 
-            # Setup the text streamer
-            streamer = TextStreamer(
-                tokenizer, skip_prompt=True, skip_special_tokens=True
-            )
-
             response_time_start = datetime.now()
             output = model.generate(
                 **inputs,
-                streamer=streamer,
                 use_cache=True,
                 max_new_tokens=Defaults.MAX_TOKENS_TO_GENERATE,
                 pad_token_id=tokenizer.eos_token_id,

@@ -318,7 +318,7 @@ def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any, Dict]:
         default=CURRENT_FILE_PATH.parents[1],
         help="Name of the directory to store the compressed file",
     )
-    
+
     if host_env == Environments.SELF_HOSTED:
         parser.add_argument(
             "--enforce-eager",
@@ -345,8 +345,8 @@ def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any, Dict]:
     model_instructions = {}
     if parsed_args.model_instructions:
         for item in parsed_args.model_instructions.split("/"):
-            key, value = item.split("=")
-            model_instructions[key] = [int(inst) for inst in value.split(",")]
+            model_key, inst_list_string = item.split("=")
+            model_instructions[model_key] = [int(inst) for inst in inst_list_string.split(",")]
 
     return (parsed_args, model_instructions)
 
