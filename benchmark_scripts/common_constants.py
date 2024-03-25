@@ -19,6 +19,8 @@ class BedrockModels:
     MODEL_ANTHROPIC_CLAUDE = "anthropic.claude-v2"
     MODEL_ANTHROPIC_CLAUDE_3_SONNET = "anthropic.claude-3-sonnet-20240229-v1:0"
     MODEL_ANTHROPIC_CLAUDE_3_HAIKU = "anthropic.claude-3-haiku-20240307-v1:0"
+    MODEL_ANTHROPIC_MIXTRAL = "mistral.mixtral-8x7b-instruct-v0:1"
+    MODEL_ANTHROPIC_MISTRAL_7B = "mistral.mistral-7b-instruct-v0:2"
 
 
 class AnyscaleModels:

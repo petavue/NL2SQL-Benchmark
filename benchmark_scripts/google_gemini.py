@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import pathlib
 from openai import AsyncOpenAI
@@ -63,9 +63,9 @@ async def run_queries_on_gemini(
             req = system_prompt.replace("[context]", context).replace("[question]", "Question: "+question).replace("[hint]",str(evidence))
             
             data_to_log["request"] = req
-            response_time_start = datetime.now()
+            response_time_start = datetime.now(timezone.utc)
             gemini_response = client.generate_content(req)
-            response_time_stop = datetime.now()
+            response_time_stop = datetime.now(timezone.utc)
             data_to_log["response"] = str(gemini_response)
 
             llm_response_content = gemini_response.text
@@ -89,7 +89,9 @@ async def run_queries_on_gemini(
                     f"{0},{llm_prompt_tokens},{llm_response_tokens},{hardness}\n",
                 )
                 continue
-
+    
+            data_to_log["response_time_start"] = response_time_start.strftime('%Y-%m-%d %H:%M:%S')
+            data_to_log["response_time_stop"] = response_time_stop.strftime('%Y-%m-%d %H:%M:%S')
             data_to_log["is_sql"] = 1
             data_to_log["sql_response"] = sql_response
             log("SQL Response successful", data_to_log, log_file_path)
