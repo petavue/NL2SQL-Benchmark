@@ -43,6 +43,8 @@ supported_models = {
     "wc-33": SelfHostedModels.MODEL_WIZARDLM_WIZARD_CODER_33B,
     "sqlc-70-a": SelfHostedModels.MODEL_DEFOG_SQLCODER_70B,
     "sqlc-7-2": SelfHostedModels.MODEL_DEFOG_SQLCODER_7B_2,
+    "mistral-v2": SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B_V2,
+
 }
 
 model_tensor_types = {
@@ -53,6 +55,7 @@ model_tensor_types = {
     SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B: torch.bfloat16,
     SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X7B: torch.bfloat16,
     SelfHostedModels.MODEL_WIZARDLM_WIZARD_CODER_33B: torch.bfloat16,
+    SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B_V2: torch.bfloat16,
 }
 
 
@@ -64,28 +67,14 @@ def initialize_model_and_tokenizer(
         model_name, cache_dir=SelfHosted.MODEL_WEIGHTS_DIRECTORY, token=auth_token
     )
 
-    if model_name in [
-        SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B,
-        SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X7B,
-    ]:
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            device_map="auto",
-            max_memory={0: "40GB", 1: "40GB", 2: "40GB", 3: "80GB"},
-            cache_dir=SelfHosted.MODEL_WEIGHTS_DIRECTORY,
-            token=auth_token,
-            torch_dtype=model_tensor_types[model_name],
-        )
-    else:
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            device_map="auto",
-            max_memory={0: "40GB", 1: "40GB", 2: "40GB", 3: "80GB"},
-            cache_dir=SelfHosted.MODEL_WEIGHTS_DIRECTORY,
-            token=auth_token,
-            torch_dtype=model_tensor_types[model_name],
-            rope_scaling={"type": "dynamic", "factor": 2},
-        )
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        device_map="auto",
+        max_memory={0: "40GB", 1: "40GB", 2: "40GB", 3: "80GB"},
+        cache_dir=SelfHosted.MODEL_WEIGHTS_DIRECTORY,
+        token=auth_token,
+        torch_dtype=model_tensor_types[model_name],
+    )
 
     return (tokenizer, model)
 
@@ -119,7 +108,7 @@ def run_queries_on_model(
     model: Any,
     tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
 ) -> None:
-    for context, question, hardness, db_id in total_user_query:
+    for context, question, hardness, db_id, evidence in total_user_query:
         torch.cuda.empty_cache()
         try:
             data_to_log = {
@@ -135,7 +124,7 @@ def run_queries_on_model(
                 instruction_size, shot_size, db_id
             )
             prompt = generate_model_specific_prompt_for_self_hosted_model(
-                model_name, system_prompt, context, question
+                model_name, system_prompt, context, question,evidence
             )
 
             data_to_log["request"] = prompt
@@ -243,7 +232,7 @@ def run_inferences() -> None:
                         model,
                         tokenizer,
                     )
-                    generate_gold_file(gold_file_list, model_file_path)
+                    generate_gold_file(gold_file_list, model_file_path,dataset_length)
                     loop_end_time = datetime.now()
                     total_secs = (loop_end_time - loop_start_time).total_seconds()
                     print(

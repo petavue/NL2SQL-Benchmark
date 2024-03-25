@@ -16,27 +16,25 @@ from common_functions import (
     multi_process_setup,
 )
 from typing import Tuple, List, Any
-from common_constants import Defaults, Environments, AnyscaleModels
+from common_constants import Defaults, Environments, GeminiModels
+import google.generativeai as genai
+
 
 CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
 
 # Set environment variables
 exec(open(f"{CURRENT_FILE_PATH}/../set_env_vars.py").read())
-HOST_ENV = Environments.ANYSCALE
+HOST_ENV = Environments.GEMINI
 
 # Get environment variables
-ANY_SCALE_API_KEY = os.getenv("ANY_SCALE_API_KEY")
-ANY_SCALE_BASE_URL = "https://api.endpoints.anyscale.com/v1"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 supported_models = {
-    "cl-70": AnyscaleModels.MODEL_META_CODELLAMA_70B,
-    "mistral": AnyscaleModels.MODEL_MISTRALAI_MISTRAL_7B,
-    "mixtral": AnyscaleModels.MODEL_MISTRALAI_MIXTRAL_8X7B,
-    "llama": AnyscaleModels.MODEL_META_LLAMA,
+    "gem-1.0pro": GeminiModels.MODEL_GEMINI_PRO_1_5,
 }
 
 
-async def run_queries_on_anyscale(
+async def run_queries_on_gemini(
     total_user_query: Tuple[str, str, str],
     output_file_path: str,
     metrics_file_path: str,
@@ -62,30 +60,19 @@ async def run_queries_on_anyscale(
                 instruction_size, shot_size, db_id
             )
 
-            req = [
-                {
-                    "role": "system",
-                    "content": system_prompt.replace("[context]", context).replace(
-                        "[question]", ""
-                    ).replace("[hint]",str(evidence))
-                },
-                {
-                    "role": "user",
-                    "content": f"{question}",
-                },
-            ]
+            req = system_prompt.replace("[context]", context).replace("[question]", "Question: "+question).replace("[hint]",str(evidence))
+            
             data_to_log["request"] = req
             response_time_start = datetime.now()
-            anyscale_response = await client.chat.completions.create(
-                model=model_name,
-                messages=req,
-            )
+            gemini_response = client.generate_content(req)
             response_time_stop = datetime.now()
-            data_to_log["response"] = str(anyscale_response)
+            data_to_log["response"] = str(gemini_response)
 
-            llm_response_content = anyscale_response.choices[0].message.content
-            llm_response_tokens = anyscale_response.usage.completion_tokens
-            llm_prompt_tokens = anyscale_response.usage.prompt_tokens
+            llm_response_content = gemini_response.text
+            llm_response_tokens = client.count_tokens(llm_response_content).total_tokens
+            llm_prompt_tokens = client.count_tokens(req).total_tokens
+            data_to_log["llm_response_tokens"] = llm_response_tokens
+            data_to_log["llm_prompt_tokens"] = llm_prompt_tokens
 
             if "select" in llm_response_content.lower():
                 is_sql_match, sql_response = sql_match(llm_response_content)
@@ -133,7 +120,8 @@ async def multi_process(
     shot_size_list: List[str],
     target_dir: str,
 ) -> None:
-    client = AsyncOpenAI(api_key=ANY_SCALE_API_KEY, base_url=ANY_SCALE_BASE_URL)
+    genai.configure(api_key=GEMINI_API_KEY)
+    client = genai.GenerativeModel(model_name)
 
     for shot_size in shot_size_list:
         if "cot" in shot_size:
@@ -161,7 +149,7 @@ async def multi_process(
                     metrics_file_path = f"{model_file_path}/metrics.csv"
                     print(f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {count}")
                     loop_start_time = datetime.now()
-                    await run_queries_on_anyscale(
+                    await run_queries_on_gemini(
                         query_list[count:],
                         output_file_path,
                         metrics_file_path,
@@ -188,7 +176,7 @@ async def multi_process(
                     f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences"
                 )
                 loop_start_time = datetime.now()
-                await run_queries_on_anyscale(
+                await run_queries_on_gemini(
                     query_list,
                     output_file_path,
                     metrics_file_path,

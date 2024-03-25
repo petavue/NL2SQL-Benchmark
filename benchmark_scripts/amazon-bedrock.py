@@ -32,6 +32,8 @@ AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 supported_models = {
     "claude": BedrockModels.MODEL_ANTHROPIC_CLAUDE,
     "llama": BedrockModels.MODEL_META_LLAMA,
+    "claude3-so":BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET,
+    "claude3-hai":BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU,
 }
 
 
@@ -56,7 +58,7 @@ def run_queries_on_bedrock(
     shot_size: str,
 ) -> None:
     try:
-        for context, question, hardness, db_id in total_user_query:
+        for context, question, hardness, db_id, evidence in total_user_query:
             data_to_log = {
                 "environment": HOST_ENV,
                 "model": model_name,
@@ -71,15 +73,27 @@ def run_queries_on_bedrock(
             )
 
             prompt = system_prompt.replace("[context]", context).replace(
-                "[question]", question
-            )
-            if model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE:
+                    "[question]", "Question: "+question
+                ).replace("[hint]",str(evidence))
+            
+            if model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET:
+                
                 prompt = f"\n\nHuman: {prompt}\n\nAssistant:"
 
-            body = {"prompt": prompt}
-
-            if model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE:
+                body = {"messages": prompt}
                 body["max_tokens_to_sample"] = 3000
+                body["anthropic_version"]= "bedrock-2023-05-31"
+
+            else:
+
+                if model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE:
+                    prompt = f"\n\nHuman: {prompt}\n\nAssistant:"
+
+                body = {"prompt": prompt}
+
+                if model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE:
+                    body["max_tokens_to_sample"] = 3000
+            
 
             data_to_log["request"] = body
 
@@ -168,31 +182,65 @@ async def multi_process(
         for dataset_length, query_list, gold_file_list in datasets_info:
             model_file_path = f"{target_dir}/{HOST_ENV}/{file_shot_size}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
 
-            output_file_path, metrics_file_path, log_file_path = initialize_files(
-                model_file_path
-            )
+            print(f"{model_file_path}/execution-log.jsonl")
+            if os.path.exists(model_file_path) and os.path.isfile(f"{model_file_path}/execution-log.jsonl"):
+                count = 0
+                with open(f"{model_file_path}/execution-log.jsonl", 'r') as file:
+                    for _ in file:
+                        count += 1
+                print(count)
+                
+                if count == dataset_length:
+                    continue
+                else:
+                    log_file_path = f"{model_file_path}/execution-log.jsonl"
 
-            print(
-                f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences"
-            )
-            loop_start_time = datetime.now()
-            run_queries_on_bedrock(
-                query_list,
-                output_file_path,
-                metrics_file_path,
-                log_file_path,
-                model_name,
-                bedrock_runtime_client,
-                instruction_size,
-                dataset_length,
-                file_shot_size,
-            )
-            generate_gold_file(gold_file_list, model_file_path)
-            loop_end_time = datetime.now()
-            total_secs = (loop_end_time - loop_start_time).total_seconds()
-            print(
-                f"Time taken for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences: {get_elapsed_time(total_secs)}"
-            )
+                    output_file_path = f"{model_file_path}/predicted.txt"
+                    metrics_file_path = f"{model_file_path}/metrics.csv"
+                    print(f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {count}")
+                    loop_start_time = datetime.now()
+                    run_queries_on_bedrock(
+                        query_list[count:],
+                        output_file_path,
+                        metrics_file_path,
+                        log_file_path,
+                        model_name,
+                        bedrock_runtime_client,
+                        instruction_size,
+                        dataset_length,
+                        file_shot_size,
+                    )
+                    generate_gold_file(gold_file_list, model_file_path,dataset_length)
+                    loop_end_time = datetime.now()
+                    total_secs = (loop_end_time - loop_start_time).total_seconds()
+                    print(
+                        f"Time taken for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences: {get_elapsed_time(total_secs)}"
+                    )
+            else:
+                print(
+                    f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences"
+                )
+                output_file_path, metrics_file_path, log_file_path = initialize_files(
+                    model_file_path
+                )
+                loop_start_time = datetime.now()
+                run_queries_on_bedrock(
+                    query_list,
+                    output_file_path,
+                    metrics_file_path,
+                    log_file_path,
+                    model_name,
+                    bedrock_runtime_client,
+                    instruction_size,
+                    dataset_length,
+                    file_shot_size,
+                )
+                generate_gold_file(gold_file_list, model_file_path,dataset_length)
+                loop_end_time = datetime.now()
+                total_secs = (loop_end_time - loop_start_time).total_seconds()
+                print(
+                    f"Time taken for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences: {get_elapsed_time(total_secs)}"
+                )
 
 
 async def main() -> None:
