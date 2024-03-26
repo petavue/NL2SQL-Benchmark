@@ -267,7 +267,7 @@ def generate_gold_file(gold_file_list: Tuple[Any, Any], model_file_path: str,inf
     with open(f"{model_file_path}/dev.json", "w") as json_file:
         json.dump(data_list, json_file, indent=4)
     
-    with open(f"{model_file_path}/predicted.txt", "r") as file:
+    with open(f"{model_file_path}/predicted.txt", "r",encoding='utf8') as file:
         sql_queries = file.readlines()
     with open(f"{model_file_path}/gold.txt", "r") as f:
         gold_query = f.readlines()

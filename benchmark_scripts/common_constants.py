@@ -51,3 +51,7 @@ class AnthropicModels:
 
 class GeminiModels:
     MODEL_GEMINI_1_PRO = "models/gemini-1.0-pro-latest"
+
+class OpenAIModels:
+    MODEL_GPT_3 = "gpt-3.5-turbo-16k"
+    MODEL_GPT_4 = "gpt-4-turbo-preview"
