@@ -60,7 +60,7 @@ def run_queries_on_bedrock(
     shot_size: str,
 ) -> None:
     try:
-        for context, question, hardness, db_id, evidence in total_user_query[:2]:
+        for context, question, hardness, db_id, evidence in total_user_query:
             data_to_log = {
                 "environment": HOST_ENV,
                 "model": model_name,
