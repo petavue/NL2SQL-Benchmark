@@ -30,10 +30,10 @@ AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 
 supported_models = {
-    "claude": BedrockModels.MODEL_ANTHROPIC_CLAUDE,
+    "claude2": BedrockModels.MODEL_ANTHROPIC_CLAUDE,
     "llama": BedrockModels.MODEL_META_LLAMA,
-    "claude3-so":BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET,
-    "claude3-hai":BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU,
+    "claude3-sonnet":BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET,
+    "claude3-haiku":BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU,
     "mistral":BedrockModels.MODEL_ANTHROPIC_MISTRAL_7B,
     "mixtral":BedrockModels.MODEL_ANTHROPIC_MIXTRAL
 }
@@ -78,11 +78,11 @@ def run_queries_on_bedrock(
                     "[question]", "Question: "+question
                 ).replace("[hint]",str(evidence))
             
-            if model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET or model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU:
+            if model_name in [ BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET, BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU]:
                 
                 body = {
-                    "anthropic_version": "bedrock-2023-05-31",
-                    "max_tokens": 300,
+                    "anthropic_version": Defaults.anthropic_version_const,
+                    "max_tokens": Defaults.MAX_TOKENS_TO_GENERATE,
                     "messages": [
                         {
                             "role": "user",
@@ -94,15 +94,16 @@ def run_queries_on_bedrock(
             elif model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE:
                 prompt = f"\n\nHuman: {prompt}\n\nAssistant:"
                 body = {"prompt": prompt}
-                body["max_tokens_to_sample"] = 300
+                body["max_tokens_to_sample"] = Defaults.MAX_TOKENS_TO_GENERATE
             elif model_name == BedrockModels.MODEL_ANTHROPIC_MISTRAL_7B:
                 prompt = f"<s>[INST] {prompt}\n\n[/INST]"
                 body = {"prompt": prompt}
-                body["max_tokens"] = 300
+                body["max_tokens"] = Defaults.MAX_TOKENS_TO_GENERATE
             elif model_name == BedrockModels.MODEL_ANTHROPIC_MIXTRAL:
                 prompt = f"<s>[INST]  {prompt}\n\n[/INST]"
                 body = {"prompt": prompt}
-                body["max_tokens"] = 300
+                body["max_tokens"] = Defaults.MAX_TOKENS_TO_GENERATE
+
             else:
                 body = {"prompt": prompt}
 

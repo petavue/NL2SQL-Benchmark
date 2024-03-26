@@ -82,7 +82,7 @@ async def run_queries_on_anthropic(
             anthropic_response = client.messages.create(
                 model=model_name,
                 messages=req,
-                max_tokens=1000,
+                max_tokens=Defaults.MAX_TOKENS_TO_GENERATE,
             )
             response_time_stop = datetime.now(timezone.utc)
             data_to_log["response"] = str(anthropic_response)

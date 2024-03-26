@@ -258,8 +258,8 @@ def generate_gold_file(gold_file_list: Tuple[Any, Any], model_file_path: str,inf
     with open(f"{model_file_path}/gold.txt", "w") as f:
         for i in range(len(query_list)):
             f.write(f"{query_list[i]}\t{db_id_list[i]}\n\n")
-    pathForDevjson = f'../spider_data/bird_equal_split_{inference_size}.csv'
-    df = pd.read_csv(pathForDevjson)
+    path_to_source_csv = f'../spider_data/bird_equal_split_{inference_size}.csv'
+    df = pd.read_csv(path_to_source_csv)
     with open(f"{model_file_path}/dev_gold.sql", "w") as f:
         for i in range(len(query_list)):
             f.write(f"{query_list[i]}\t{db_id_list[i]}\n")
@@ -336,7 +336,7 @@ def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any, Dict]:
         "--inst",
         dest="inst",
         type=str,
-        default="0",
+        default="0,5,7,9,11",
         help=(
             "A comma separated list of instructions set to include in the results, e.g. "
             "5,7,9. The models specifed will run inferences for these instruction sets alone"
@@ -368,15 +368,19 @@ def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any, Dict]:
         "--target-directory",
         type=str,
         dest="target_dir",
-        default=CURRENT_FILE_PATH,
+        default=CURRENT_FILE_PATH.parents[1],
         help="Name of the directory to store the compressed file",
     )
 
     parsed_args = parser.parse_args()
+    parsed_args.target_dir = str(parsed_args.target_dir) + "/inference_results/"
+
 
     model_instructions = {}
     if parsed_args.model_instructions:
         for item in parsed_args.model_instructions.split("/"):
+            model_key, inst_list_string = item.split("=")
+            model_instructions[model_key] = [int(inst) for inst in inst_list_string.split(",")]
             key, value = item.split("=")
             model_instructions[key] = [int(inst) for inst in value.split(",")]
 
@@ -410,13 +414,6 @@ def intermediate_sql_match(sql_string: str) -> Tuple[bool, str]:
         return (True, match[0])
     else:
         return (False, processed_str)
-    
-
-
-
-
-
-
 
 def sql_match(sql_string: str) -> Tuple[bool, str]:
     is_sql_match, processed_str = intermediate_sql_match(sql_string)

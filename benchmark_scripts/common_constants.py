@@ -2,6 +2,7 @@ class Defaults:
     INFERENCE_LENGTH_LIST = [360]
     INSTRUCTION_SIZE_LIST = [0,5,7,9,11]
     MAX_TOKENS_TO_GENERATE = 300
+    anthropic_version_const = "bedrock-2023-05-31"
 
 
 class Environments:
@@ -49,4 +50,4 @@ class AnthropicModels:
     MODEL_ANTHROPIC_HAIKU = "claude-3-haiku-20240307"
 
 class GeminiModels:
-    MODEL_GEMINI_PRO_1_5 = "models/gemini-1.0-pro-latest"
+    MODEL_GEMINI_1_PRO = "models/gemini-1.0-pro-latest"

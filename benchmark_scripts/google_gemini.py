@@ -30,7 +30,7 @@ HOST_ENV = Environments.GEMINI
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 supported_models = {
-    "gem-1.0pro": GeminiModels.MODEL_GEMINI_PRO_1_5,
+    "gem-1.0pro": GeminiModels.MODEL_GEMINI_1_PRO,
 }
 
 
