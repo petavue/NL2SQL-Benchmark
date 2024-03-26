@@ -231,7 +231,7 @@ def run_inferences() -> None:
                         loop_start_time = datetime.now()
                         
                         run_queries_on_model(
-                        query_list,
+                        query_list[count:],
                         output_file_path,
                         metrics_file_path,
                         log_file_path,

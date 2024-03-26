@@ -60,7 +60,7 @@ def run_queries_on_bedrock(
     shot_size: str,
 ) -> None:
     try:
-        for context, question, hardness, db_id, evidence in total_user_query[:3]:
+        for context, question, hardness, db_id, evidence in total_user_query[:2]:
             data_to_log = {
                 "environment": HOST_ENV,
                 "model": model_name,
@@ -135,9 +135,9 @@ def run_queries_on_bedrock(
                 llm_response_content = response_body["completion"]
             elif model_name == BedrockModels.MODEL_ANTHROPIC_MISTRAL_7B or model_name == BedrockModels.MODEL_ANTHROPIC_MIXTRAL:
                 llm_response_content = response_body["outputs"][0]['text']
-            elif model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET or BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU:
+            elif model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET or model_name ==BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU:
                 llm_response_content = response_body['content'][0]['text']
-            else:
+            elif model_name==BedrockModels.MODEL_META_LLAMA:
                 llm_response_content = response_body["generation"]
 
             if "select" in llm_response_content.lower():
