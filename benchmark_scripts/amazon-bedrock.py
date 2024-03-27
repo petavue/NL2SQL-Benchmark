@@ -198,7 +198,7 @@ async def multi_process(
             file_shot_size = shot_size + "_shot"
 
         for dataset_length, query_list, gold_file_list in datasets_info:
-            model_file_path = f"{target_dir}/{HOST_ENV}/{file_shot_size}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
+            model_file_path = f"{target_dir}/{HOST_ENV}/{file_shot_size}/{model_name.replace(':','_')}/{instruction_size}_Instructions/{dataset_length}_Inferences"
 
             print(f"{model_file_path}/execution-log.jsonl")
             if os.path.exists(model_file_path) and os.path.isfile(f"{model_file_path}/execution-log.jsonl"):
