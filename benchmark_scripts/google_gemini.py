@@ -17,7 +17,7 @@ from common_functions import (
 )
 from typing import Tuple, List, Any
 from common_constants import Defaults, Environments, GeminiModels
-import google.generativeai as genai
+import google.generativeai as gen_ai
 
 
 CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
@@ -60,8 +60,12 @@ async def run_queries_on_gemini(
                 instruction_size, shot_size, db_id
             )
 
-            req = system_prompt.replace("[context]", context).replace("[question]", "Question: "+question).replace("[hint]",str(evidence))
-            
+            req = (
+                system_prompt.replace("[context]", context)
+                .replace("[question]", "Question: " + question)
+                .replace("[hint]", str(evidence))
+            )
+
             data_to_log["request"] = req
             response_time_start = datetime.now(timezone.utc)
             gemini_response = client.generate_content(req)
@@ -89,9 +93,13 @@ async def run_queries_on_gemini(
                     f"{0},{llm_prompt_tokens},{llm_response_tokens},{hardness}\n",
                 )
                 continue
-    
-            data_to_log["response_time_start"] = response_time_start.strftime('%Y-%m-%d %H:%M:%S')
-            data_to_log["response_time_stop"] = response_time_stop.strftime('%Y-%m-%d %H:%M:%S')
+
+            data_to_log["response_time_start"] = response_time_start.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+            data_to_log["response_time_stop"] = response_time_stop.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
             data_to_log["is_sql"] = 1
             data_to_log["sql_response"] = sql_response
             log("SQL Response successful", data_to_log, log_file_path)
@@ -122,8 +130,8 @@ async def multi_process(
     shot_size_list: List[str],
     target_dir: str,
 ) -> None:
-    genai.configure(api_key=GEMINI_API_KEY)
-    client = genai.GenerativeModel(model_name)
+    gen_ai.configure(api_key=GEMINI_API_KEY)
+    client = gen_ai.GenerativeModel(model_name)
 
     for shot_size in shot_size_list:
         if "cot" in shot_size:
@@ -134,25 +142,26 @@ async def multi_process(
         for dataset_length, query_list, gold_file_list in datasets_info:
             model_file_path = f"{target_dir}/{HOST_ENV}/{file_shot_size}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
 
-            print(f"{model_file_path}/execution-log.jsonl")
-            if os.path.exists(model_file_path) and os.path.isfile(f"{model_file_path}/execution-log.jsonl"):
-                count = 0
-                with open(f"{model_file_path}/execution-log.jsonl", 'r') as file:
-                    for _ in file:
-                        count += 1
-                print(count)
-                
-                if count == dataset_length:
+            if os.path.exists(model_file_path) and os.path.isfile(
+                f"{model_file_path}/execution-log.jsonl"
+            ):
+                num_lines = 0
+                with open(f"{model_file_path}/execution-log.jsonl", "rb") as file:
+                    num_lines = sum(1 for _ in file)
+
+                if num_lines == dataset_length:
                     continue
                 else:
                     log_file_path = f"{model_file_path}/execution-log.jsonl"
 
                     output_file_path = f"{model_file_path}/predicted.txt"
                     metrics_file_path = f"{model_file_path}/metrics.csv"
-                    print(f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {count}")
+                    print(
+                        f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {num_lines}"
+                    )
                     loop_start_time = datetime.now()
                     await run_queries_on_gemini(
-                        query_list[count:],
+                        query_list[num_lines:],
                         output_file_path,
                         metrics_file_path,
                         log_file_path,
@@ -162,7 +171,7 @@ async def multi_process(
                         dataset_length,
                         file_shot_size,
                     )
-                    generate_gold_file(gold_file_list, model_file_path,dataset_length)
+                    generate_gold_file(gold_file_list, model_file_path, dataset_length)
                     loop_end_time = datetime.now()
                     total_secs = (loop_end_time - loop_start_time).total_seconds()
                     print(
@@ -189,7 +198,7 @@ async def multi_process(
                     dataset_length,
                     file_shot_size,
                 )
-                generate_gold_file(gold_file_list, model_file_path,dataset_length)
+                generate_gold_file(gold_file_list, model_file_path, dataset_length)
                 loop_end_time = datetime.now()
                 total_secs = (loop_end_time - loop_start_time).total_seconds()
                 print(

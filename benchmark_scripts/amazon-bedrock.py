@@ -17,7 +17,7 @@ from common_functions import (
     multi_process_setup,
 )
 from typing import Any, Tuple, List
-from common_constants import Defaults, Environments, BedrockModels
+from common_constants import Defaults, Environments, BedrockModels, AmazonBedrock
 
 CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
 
@@ -32,10 +32,10 @@ AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 supported_models = {
     "claude2": BedrockModels.MODEL_ANTHROPIC_CLAUDE,
     "llama": BedrockModels.MODEL_META_LLAMA,
-    "claude3-sonnet":BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET,
-    "claude3-haiku":BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU,
-    "mistral":BedrockModels.MODEL_ANTHROPIC_MISTRAL_7B,
-    "mixtral":BedrockModels.MODEL_ANTHROPIC_MIXTRAL
+    "claude3-sonnet": BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET,
+    "claude3-haiku": BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU,
+    "mistral": BedrockModels.MODEL_ANTHROPIC_MISTRAL_7B,
+    "mixtral": BedrockModels.MODEL_ANTHROPIC_MIXTRAL,
 }
 
 
@@ -74,14 +74,18 @@ def run_queries_on_bedrock(
                 instruction_size, shot_size, db_id
             )
 
-            prompt = system_prompt.replace("[context]", context).replace(
-                    "[question]", "Question: "+question
-                ).replace("[hint]",str(evidence))
-            
-            if model_name in [ BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET, BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU]:
-                
+            prompt = (
+                system_prompt.replace("[context]", context)
+                .replace("[question]", "Question: " + question)
+                .replace("[hint]", str(evidence))
+            )
+
+            if model_name in [
+                BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET,
+                BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU,
+            ]:
                 body = {
-                    "anthropic_version": Defaults.anthropic_version_const,
+                    "anthropic_version": AmazonBedrock.CLAUDE3_MODEL_VERSION,
                     "max_tokens": Defaults.MAX_TOKENS_TO_GENERATE,
                     "messages": [
                         {
@@ -90,20 +94,17 @@ def run_queries_on_bedrock(
                         }
                     ],
                 }
-
             elif model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE:
                 prompt = f"\n\nHuman: {prompt}\n\nAssistant:"
                 body = {"prompt": prompt}
                 body["max_tokens_to_sample"] = Defaults.MAX_TOKENS_TO_GENERATE
-            elif model_name == BedrockModels.MODEL_ANTHROPIC_MISTRAL_7B:
+            elif model_name in [
+                BedrockModels.MODEL_ANTHROPIC_MISTRAL_7B,
+                BedrockModels.MODEL_ANTHROPIC_MIXTRAL,
+            ]:
                 prompt = f"<s>[INST] {prompt}\n\n[/INST]"
                 body = {"prompt": prompt}
                 body["max_tokens"] = Defaults.MAX_TOKENS_TO_GENERATE
-            elif model_name == BedrockModels.MODEL_ANTHROPIC_MIXTRAL:
-                prompt = f"<s>[INST]  {prompt}\n\n[/INST]"
-                body = {"prompt": prompt}
-                body["max_tokens"] = Defaults.MAX_TOKENS_TO_GENERATE
-
             else:
                 body = {"prompt": prompt}
 
@@ -134,11 +135,17 @@ def run_queries_on_bedrock(
 
             if model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE:
                 llm_response_content = response_body["completion"]
-            elif model_name == BedrockModels.MODEL_ANTHROPIC_MISTRAL_7B or model_name == BedrockModels.MODEL_ANTHROPIC_MIXTRAL:
-                llm_response_content = response_body["outputs"][0]['text']
-            elif model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET or model_name ==BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU:
-                llm_response_content = response_body['content'][0]['text']
-            elif model_name==BedrockModels.MODEL_META_LLAMA:
+            elif model_name in [
+                BedrockModels.MODEL_ANTHROPIC_MISTRAL_7B,
+                BedrockModels.MODEL_ANTHROPIC_MIXTRAL,
+            ]:
+                llm_response_content = response_body["outputs"][0]["text"]
+            elif model_name in [
+                BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET,
+                BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU,
+            ]:
+                llm_response_content = response_body["content"][0]["text"]
+            elif model_name == BedrockModels.MODEL_META_LLAMA:
                 llm_response_content = response_body["generation"]
 
             if "select" in llm_response_content.lower():
@@ -157,8 +164,12 @@ def run_queries_on_bedrock(
                 )
                 continue
 
-            data_to_log["response_time_start"] = response_time_start.strftime('%Y-%m-%d %H:%M:%S')
-            data_to_log["response_time_stop"] = response_time_stop.strftime('%Y-%m-%d %H:%M:%S')
+            data_to_log["response_time_start"] = response_time_start.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+            data_to_log["response_time_stop"] = response_time_stop.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
             data_to_log["is_sql"] = 1
             data_to_log["sql_response"] = sql_response
             log("SQL Response successful", data_to_log, log_file_path)
@@ -200,24 +211,26 @@ async def multi_process(
         for dataset_length, query_list, gold_file_list in datasets_info:
             model_file_path = f"{target_dir}/{HOST_ENV}/{file_shot_size}/{model_name.replace(':','_')}/{instruction_size}_Instructions/{dataset_length}_Inferences"
 
-            print(f"{model_file_path}/execution-log.jsonl")
-            if os.path.exists(model_file_path) and os.path.isfile(f"{model_file_path}/execution-log.jsonl"):
-                count = 0
-                with open(f"{model_file_path}/execution-log.jsonl", 'r') as file:
-                    for _ in file:
-                        count += 1
-                
-                if count == dataset_length:
+            if os.path.exists(model_file_path) and os.path.isfile(
+                f"{model_file_path}/execution-log.jsonl"
+            ):
+                num_lines = 0
+                with open(f"{model_file_path}/execution-log.jsonl", "rb") as file:
+                    num_lines = sum(1 for _ in file)
+
+                if num_lines == dataset_length:
                     continue
                 else:
                     log_file_path = f"{model_file_path}/execution-log.jsonl"
 
                     output_file_path = f"{model_file_path}/predicted.txt"
                     metrics_file_path = f"{model_file_path}/metrics.csv"
-                    print(f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {count}")
+                    print(
+                        f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {num_lines}"
+                    )
                     loop_start_time = datetime.now()
                     run_queries_on_bedrock(
-                        query_list[count:],
+                        query_list[num_lines:],
                         output_file_path,
                         metrics_file_path,
                         log_file_path,
@@ -227,7 +240,7 @@ async def multi_process(
                         dataset_length,
                         file_shot_size,
                     )
-                    generate_gold_file(gold_file_list, model_file_path,dataset_length)
+                    generate_gold_file(gold_file_list, model_file_path, dataset_length)
                     loop_end_time = datetime.now()
                     total_secs = (loop_end_time - loop_start_time).total_seconds()
                     print(
@@ -252,7 +265,7 @@ async def multi_process(
                     dataset_length,
                     file_shot_size,
                 )
-                generate_gold_file(gold_file_list, model_file_path,dataset_length)
+                generate_gold_file(gold_file_list, model_file_path, dataset_length)
                 loop_end_time = datetime.now()
                 total_secs = (loop_end_time - loop_start_time).total_seconds()
                 print(
