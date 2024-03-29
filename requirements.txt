@@ -1,0 +1,14 @@
+torch
+pyarrow
+pandas
+numpy
+datetime
+langchain 
+einops 
+accelerate 
+transformers 
+bitsandbytes 
+scipy
+xformers
+sentencepiece
+vllm==0.3.3

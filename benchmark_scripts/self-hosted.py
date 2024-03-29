@@ -3,20 +3,15 @@
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
-    TextStreamer,
     PreTrainedTokenizer,
     PreTrainedTokenizerFast,
 )
 import torch
-from datetime import datetime
+from datetime import datetime, timezone
 import os
-import asyncio
-from concurrent.futures import ProcessPoolExecutor
-from functools import partial
 import pathlib
 from common_functions import (
     get_datasets_info,
-    initialize_system_prompt,
     initialize_files,
     generate_gold_file,
     write_to_file,
@@ -24,10 +19,11 @@ from common_functions import (
     get_elapsed_time,
     sql_match,
     get_parsed_args,
-    multi_process_setup,
+    get_instruction_shot_specific_prompt,
+    generate_model_specific_prompt_for_self_hosted_model,
 )
-from typing import Tuple, Dict, Any
-from common_constants import Defaults, Environments
+from typing import Tuple, Any
+from common_constants import Defaults, Environments, SelfHostedModels, SelfHosted
 
 CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
 
@@ -38,60 +34,46 @@ HOST_ENV = Environments.SELF_HOSTED
 # Get environment variables
 auth_token = os.getenv("HUGGING_FACE_TOKEN")
 
-MODEL_META_CODELLAMA_70B = "codellama/CodeLlama-70b-Instruct-hf"
-MODEL_META_CODELLAMA_34B = "codellama/CodeLlama-34b-Instruct-hf"
-MODEL_MISTRALAI_MISTRAL_7B = "mistralai/Mistral-7B-Instruct-v0.1"
-MODEL_MISTRALAI_MIXTRAL_8X7B = "mistralai/Mixtral-8x7B-Instruct-v0.1"
-MODEL_WIZARDLM_WIZARD_CODER_33B = "WizardLM/WizardCoder-33B-V1.1"
-MODEL_DEFOG_SQLCODER_70B = "defog/sqlcoder-70b-alpha"
-MODEL_DEFOG_SQLCODER_7B_2 = "defog/sqlcoder-7b-2"
 
 supported_models = {
-    "cl-70": MODEL_META_CODELLAMA_70B,
-    "cl-34": MODEL_META_CODELLAMA_34B,
-    "mistral": MODEL_MISTRALAI_MISTRAL_7B,
-    "mixtral": MODEL_MISTRALAI_MIXTRAL_8X7B,
-    "wc-33": MODEL_WIZARDLM_WIZARD_CODER_33B,
-    "sqlc-70-a": MODEL_DEFOG_SQLCODER_70B,
-    "sqlc-7-2": MODEL_DEFOG_SQLCODER_7B_2,
+    "cl-70": SelfHostedModels.MODEL_META_CODELLAMA_70B,
+    "cl-34": SelfHostedModels.MODEL_META_CODELLAMA_34B,
+    "mistral": SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B,
+    "mixtral": SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X7B,
+    "wc-33": SelfHostedModels.MODEL_WIZARDLM_WIZARD_CODER_33B,
+    "sqlc-70-a": SelfHostedModels.MODEL_DEFOG_SQLCODER_70B,
+    "sqlc-7-2": SelfHostedModels.MODEL_DEFOG_SQLCODER_7B_2,
+    "mistral-v2": SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B_V2,
 }
 
 model_tensor_types = {
-    MODEL_DEFOG_SQLCODER_70B: torch.float16,
-    MODEL_DEFOG_SQLCODER_7B_2: torch.float16,
-    MODEL_META_CODELLAMA_70B: torch.bfloat16,
-    MODEL_META_CODELLAMA_34B: torch.bfloat16,
-    MODEL_MISTRALAI_MISTRAL_7B: torch.bfloat16,
-    MODEL_MISTRALAI_MIXTRAL_8X7B: torch.bfloat16,
-    MODEL_WIZARDLM_WIZARD_CODER_33B: torch.bfloat16,
+    SelfHostedModels.MODEL_DEFOG_SQLCODER_70B: torch.float16,
+    SelfHostedModels.MODEL_DEFOG_SQLCODER_7B_2: torch.float16,
+    SelfHostedModels.MODEL_META_CODELLAMA_70B: torch.bfloat16,
+    SelfHostedModels.MODEL_META_CODELLAMA_34B: torch.bfloat16,
+    SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B: torch.bfloat16,
+    SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X7B: torch.bfloat16,
+    SelfHostedModels.MODEL_WIZARDLM_WIZARD_CODER_33B: torch.bfloat16,
+    SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B_V2: torch.bfloat16,
 }
 
 
-def initialize_model_and_tokenizer(model_name):
+def initialize_model_and_tokenizer(
+    model_name: str,
+) -> Tuple[PreTrainedTokenizer | PreTrainedTokenizerFast, Any]:
     # Create tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
-        model_name, cache_dir="./model/", token=auth_token
+        model_name, cache_dir=SelfHosted.MODEL_WEIGHTS_DIRECTORY, token=auth_token
     )
 
-    if model_name in [MODEL_MISTRALAI_MISTRAL_7B, MODEL_MISTRALAI_MIXTRAL_8X7B]:
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            device_map="auto",
-            max_memory={0: "40GB", 1: "40GB", 2: "40GB", 3: "80GB"},
-            cache_dir="./model/",
-            token=auth_token,
-            torch_dtype=model_tensor_types[model_name],
-        )
-    else:
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            device_map="auto",
-            max_memory={0: "40GB", 1: "40GB", 2: "40GB", 3: "80GB"},
-            cache_dir="./model/",
-            token=auth_token,
-            torch_dtype=model_tensor_types[model_name],
-            rope_scaling={"type": "dynamic", "factor": 2},
-        )
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        device_map="auto",
+        max_memory={0: "40GB", 1: "40GB", 2: "40GB", 3: "80GB"},
+        cache_dir=SelfHosted.MODEL_WEIGHTS_DIRECTORY,
+        token=auth_token,
+        torch_dtype=model_tensor_types[model_name],
+    )
 
     return (tokenizer, model)
 
@@ -103,12 +85,10 @@ def test_model(tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, model: 
             ### Assistant:"
     # Pass the prompt to the tokenizer
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-    # Setup the text streamer
-    streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
 
     # Actually run the thing
     output = model.generate(
-        **inputs, streamer=streamer, use_cache=True, max_new_tokens=300
+        **inputs, use_cache=True, max_new_tokens=Defaults.MAX_TOKENS_TO_GENERATE
     )
 
     # Covert the output tokens back to text
@@ -121,13 +101,13 @@ def run_queries_on_model(
     metrics_file_path: str,
     log_file_path: str,
     model_name: str,
-    system_prompt: str,
-    tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
-    model: Any,
     instruction_size: int,
     dataset_length: int,
+    shot_size: str,
+    model: Any,
+    tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
 ) -> None:
-    for context, question, hardness in total_user_query:
+    for context, question, hardness, db_id, evidence in total_user_query:
         torch.cuda.empty_cache()
         try:
             data_to_log = {
@@ -138,68 +118,26 @@ def run_queries_on_model(
                 "severity": "info",
                 "is_sql": 0,
             }
-            if model_name in [
-                MODEL_META_CODELLAMA_70B,
-                MODEL_MISTRALAI_MISTRAL_7B,
-                MODEL_MISTRALAI_MIXTRAL_8X7B,
-            ]:
-                if model_name == MODEL_META_CODELLAMA_70B:
-                    prompt = [
-                        {
-                            "role": "system",
-                            "content": system_prompt.replace(
-                                "[context]", context
-                            ).replace("[question]", ""),
-                        },
-                        {"role": "user", "content": question},
-                    ]
-                else:
-                    prompt = [
-                        {
-                            "role": "user",
-                            "content": system_prompt.replace(
-                                "[context]", context
-                            ).replace("[question]", ""),
-                        },
-                        {"role": "assistant", "content": question},
-                    ]
-                data_to_log["request"] = prompt
 
-                inputs = tokenizer.apply_chat_template(prompt, return_tensors="pt").to(
-                    "cuda"
-                )
-                llm_prompt_tokens = len(inputs)
+            system_prompt = get_instruction_shot_specific_prompt(
+                instruction_size, shot_size, db_id
+            )
+            prompt = generate_model_specific_prompt_for_self_hosted_model(
+                model_name, system_prompt, context, question, evidence
+            )
 
-                response_time_start = datetime.now()
-                output = model.generate(
-                    input_ids=inputs,
-                    use_cache=True,
-                    max_new_tokens=300,
-                    pad_token_id=tokenizer.eos_token_id,
-                )
-                response_time_stop = datetime.now()
-            else:
-                prompt = system_prompt.replace("[context]", context).replace(
-                    "[question]", question
-                )
-                data_to_log["request"] = prompt
-                inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
-                llm_prompt_tokens = len(inputs)
+            data_to_log["request"] = prompt
+            inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+            llm_prompt_tokens = len(inputs)
 
-                # Setup the text streamer
-                streamer = TextStreamer(
-                    tokenizer, skip_prompt=True, skip_special_tokens=True
-                )
-
-                response_time_start = datetime.now()
-                output = model.generate(
-                    **inputs,
-                    streamer=streamer,
-                    use_cache=True,
-                    max_new_tokens=300,
-                    pad_token_id=tokenizer.eos_token_id,
-                )
-                response_time_stop = datetime.now()
+            response_time_start = datetime.now(timezone.utc)
+            output = model.generate(
+                **inputs,
+                use_cache=True,
+                max_new_tokens=Defaults.MAX_TOKENS_TO_GENERATE,
+                pad_token_id=tokenizer.eos_token_id,
+            )
+            response_time_stop = datetime.now(timezone.utc)
 
             llm_response_content = tokenizer.decode(output[0], skip_special_tokens=True)
             llm_response_tokens = len(output[0])
@@ -221,6 +159,12 @@ def run_queries_on_model(
                 )
                 continue
 
+            data_to_log["response_time_start"] = response_time_start.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+            data_to_log["response_time_stop"] = response_time_stop.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
             data_to_log["is_sql"] = 1
             data_to_log["sql_response"] = sql_response
             log("SQL Response successful", data_to_log, log_file_path)
@@ -244,46 +188,11 @@ def run_queries_on_model(
             )
 
 
-async def multi_process(
-    instruction_size: int, datasets_info: list, model_name: str, args: Any
-) -> None:
-    system_prompt = initialize_system_prompt(instruction_size)
-    tokenizer, model = initialize_model_and_tokenizer(model_name)
-    for dataset_length, query_list, gold_file_list in datasets_info:
-        model_file_path = f"{args.target_dir}/{HOST_ENV}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
-
-        output_file_path, metrics_file_path, log_file_path = initialize_files(
-            model_file_path
-        )
-
-        print(
-            f"Starting loop for {model_name} - {instruction_size} instructions - {dataset_length} inferences"
-        )
-        loop_start_time = datetime.now()
-        run_queries_on_model(
-            query_list,
-            output_file_path,
-            metrics_file_path,
-            log_file_path,
-            model_name,
-            system_prompt,
-            tokenizer,
-            model,
-            instruction_size,
-            dataset_length,
-        )
-        generate_gold_file(gold_file_list, model_file_path)
-        loop_end_time = datetime.now()
-        total_secs = (loop_end_time - loop_start_time).total_seconds()
-        print(
-            f"Time taken for {dataset_length} records: {get_elapsed_time(total_secs)}"
-        )
-
-
-async def main():
+def run_inferences() -> None:
     args, model_instructions = get_parsed_args(supported_models, HOST_ENV)
     inference_length_in_args = [int(inst) for inst in args.inf_length.split(",")]
     dataset_length_list = inference_length_in_args or Defaults.INFERENCE_LENGTH_LIST
+    shot_size_list = args.shot_size.split(",")
 
     datasets_info = get_datasets_info(dataset_length_list)
 
@@ -296,11 +205,85 @@ async def main():
             instruction_size_list = Defaults.INSTRUCTION_SIZE_LIST
 
         model_name = supported_models[model_name_from_args]
+        tokenizer, model = initialize_model_and_tokenizer(model_name)
 
-        await multi_process_setup(
-            multi_process, instruction_size_list, datasets_info, model_name, args
-        )
+        for shot_size in shot_size_list:
+            if "cot" in shot_size:
+                file_shot_size = shot_size.split("-")[0] + "_shot_cot"
+            else:
+                file_shot_size = shot_size + "_shot"
+
+            for instruction_size in instruction_size_list:
+                for dataset_length, query_list, gold_file_list in datasets_info:
+                    model_file_path = f"{args.target_dir}/{HOST_ENV}/{file_shot_size}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
+
+                if os.path.exists(model_file_path) and os.path.isfile(
+                    f"{model_file_path}/execution-log.jsonl"
+                ):
+                    num_lines = 0
+                    with open(f"{model_file_path}/execution-log.jsonl", "rb") as file:
+                        num_lines = sum(1 for _ in file)
+
+                    if num_lines == dataset_length:
+                        continue
+                    else:
+                        log_file_path = f"{model_file_path}/execution-log.jsonl"
+
+                        output_file_path = f"{model_file_path}/predicted.txt"
+                        metrics_file_path = f"{model_file_path}/metrics.csv"
+                        print(
+                            f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {num_lines}"
+                        )
+                        loop_start_time = datetime.now()
+                        run_queries_on_model(
+                            query_list[num_lines:],
+                            output_file_path,
+                            metrics_file_path,
+                            log_file_path,
+                            model_name,
+                            instruction_size,
+                            dataset_length,
+                            file_shot_size,
+                            model,
+                            tokenizer,
+                        )
+                        generate_gold_file(
+                            gold_file_list, model_file_path, dataset_length
+                        )
+                        loop_end_time = datetime.now()
+                        total_secs = (loop_end_time - loop_start_time).total_seconds()
+                        print(
+                            f"Time taken for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences: {get_elapsed_time(total_secs)}"
+                        )
+
+                else:
+                    output_file_path, metrics_file_path, log_file_path = (
+                        initialize_files(model_file_path)
+                    )
+
+                    print(
+                        f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences"
+                    )
+                    loop_start_time = datetime.now()
+                    run_queries_on_model(
+                        query_list,
+                        output_file_path,
+                        metrics_file_path,
+                        log_file_path,
+                        model_name,
+                        instruction_size,
+                        dataset_length,
+                        file_shot_size,
+                        model,
+                        tokenizer,
+                    )
+                    generate_gold_file(gold_file_list, model_file_path, dataset_length)
+                    loop_end_time = datetime.now()
+                    total_secs = (loop_end_time - loop_start_time).total_seconds()
+                    print(
+                        f"Time taken for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences: {get_elapsed_time(total_secs)}"
+                    )
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_inferences()
