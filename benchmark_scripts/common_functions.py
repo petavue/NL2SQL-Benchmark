@@ -10,7 +10,7 @@ from typing import Any, List, Tuple, Dict, Callable
 import json
 from ast import literal_eval
 import pathlib
-from common_constants import SelfHostedModels, Environments
+from common_constants import SelfHostedModels
 
 CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
 
@@ -68,17 +68,16 @@ def get_datasets_info(
 ) -> Tuple[List, List]:
     datasets_info = []
     for dataset_length in dataset_length_list:
-        output_file_path = (
-            f"../spider_data/spider_equal_split_{str(dataset_length)}.csv"
-        )
+        output_file_path = f"../sql_data/bird_equal_split_{str(dataset_length)}.csv"
         spider_data_frame = pd.read_csv(output_file_path)
 
         query_list = list(
             zip(
-                spider_data_frame.context,
+                spider_data_frame.schema,
                 spider_data_frame.question,
-                spider_data_frame.hardness,
+                spider_data_frame.difficulty,
                 spider_data_frame.db_id,
+                spider_data_frame.evidence,
             )
         )
         gold_file_list = (spider_data_frame["sql_query"], spider_data_frame["db_id"])
@@ -89,7 +88,7 @@ def get_datasets_info(
 
 
 def get_shot_samples_data(file_shot_size: str) -> List:
-    with open(f"../spider_data/spider_{file_shot_size}_samples.txt") as samples_file:
+    with open(f"../sql_data/spider_{file_shot_size}_samples.txt") as samples_file:
         contents = samples_file.read()
         few_shot_samples = literal_eval(contents)
 
@@ -129,80 +128,91 @@ def get_instruction_shot_specific_prompt(
 
 
 def generate_model_specific_prompt_for_self_hosted_model(
-    model_name: str, system_prompt: str, context: str, question: str
+    model_name: str, system_prompt: str, context: str, question: str, evidence: str
 ) -> str:
     if model_name == SelfHostedModels.MODEL_META_CODELLAMA_70B:
-        system_prompt = system_prompt.replace("[context]", context).replace(
-            "[question]", ""
+        system_prompt = (
+            system_prompt.replace("[context]", context)
+            .replace("[question]", "")
+            .replace("[hint]", str(evidence))
         )
         prompt = f"<s>Source: system\n\n {system_prompt} <step> Source: user\n\n {question} <step> Source: assistant\nDestination: user\n\n "
     elif model_name == SelfHostedModels.MODEL_WIZARDLM_WIZARD_CODER_33B:
-        system_prompt = system_prompt.replace("[context]", context).replace(
-            "[question]", ""
+        system_prompt = (
+            system_prompt.replace("[context]", context)
+            .replace("[question]", "")
+            .replace("[hint]", str(evidence))
         )
         prompt = f"Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{system_prompt} QUESTION: {question} \n\n### Response:"
     elif model_name in [
         SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B,
         SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X7B,
+        SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B_V2,
     ]:
-        system_prompt = system_prompt.replace("[context]", context).replace(
-            "[question]", question
+        system_prompt = (
+            system_prompt.replace("[context]", context)
+            .replace("[question]", question)
+            .replace("[hint]", str(evidence))
         )
         prompt = f"<s> [INST] {system_prompt} [/INST]"
     elif model_name in [
         SelfHostedModels.MODEL_DEFOG_SQLCODER_70B,
         SelfHostedModels.MODEL_DEFOG_SQLCODER_7B_2,
     ]:
-        system_prompt = system_prompt.replace("[context]", context).replace(
-            "[question]", ""
+        system_prompt = (
+            system_prompt.replace("[context]", context)
+            .replace("[question]", "")
+            .replace("[hint]", str(evidence))
         )
         prompt = f"### Task \nGenerate a SQL query to answer [QUESTION]{question}[/QUESTION]### Database Schema \nThe query will run on a database with the following schema:{system_prompt} ### Answer \nGiven the database schema, here is the SQL query that [QUESTION]{question}[/QUESTION] \n[SQL]"
     else:
-        prompt = system_prompt.replace("[context]", context).replace(
-            "[question]", question
+        prompt = (
+            system_prompt.replace("[context]", context)
+            .replace("[question]", question)
+            .replace("[hint]", str(evidence))
         )
 
     return prompt
 
 
 def initialize_system_prompt(instruction_size: int) -> str:
+    DEFAULT_INSTRUCTIONS = """
+    Adhere to the following Instuction:
+    1. The answer generated must only be an SQL query ending with delimiter “;”
+    2. Dedicate time to understand the database schema fully, identifying the relevant tables and columns that align with the query’s objectives.
+    3. Utilize only the data from the specified tables in the provided database schema.
+    4. Pay attention to case sensitivity in data and ensure the extraction of required information aligns precisely with the specified columns and tables.
+    5. Analyze the query’s requirements to determine the appropriate use of GROUP BY, HAVING, and UNION clauses, ensuring they contribute to the accurate aggregation and segmentation of data."""
     INSTRUCTIONS_6_TO_7 = """
-    6. Spend time to get the right databases,tables,and columns required for the question
-    7. give attention to primary and foreign keys"""
+    6. Pay careful attention to the primary keys, foreign keys present in the database schema to determine appropriate columns for JOIN operations.
+    7. Apply WHERE clause conditions accurately to filter the dataset based on specified criteria."""
     INSTRUCTIONS_8_TO_9 = """
-    8. analyze the table constraints for columns such as unique etc.
-    9. understand the question and analyze where to correctly use 'GROUP BY', 'HAVING', 'UNION' etc."""
+    8. Apply WHERE clause conditions accurately to filter the dataset and use ASC or DESC in sorting results where specified.
+    9. Assign meaningful aliases to tables and columns where necessary, especially in cases of grouping or joining, to enhance the clarity and maintainability of the SQL query."""
     INSTRUCTIONS_10_TO_11 = """
-    10. first, thoroughly go through the question, and figure out which columns of tables need to be chosen. comprehend what data is required and execute.
-    11. use proper alias names for tables where grouping or joining is required to ensure clarity"""
-    INSTRUCTIONS_12_TO_13 = """
-    12. You should not perform any write operations, such as modifying, updating, deleting, or dropping data in the database. If a task requires such operations, you should return a message indicating that you are 'I'm sorry, but I can't assist with that.
-    13. the query must be compatible with the Database request"""
+    10. When multiple tables are involved, prioritize selecting appropriate columns based on context and handle null values properly in columns.
+    11. Avoid any write operations (like modify, update, delete, or drop). Should the task demand such actions, respond with a polite refusal, stating, “I’m sorry, but I can’t assist with that.”"""
 
     extra_instruction = []
+    if instruction_size >= 5:
+        extra_instruction.append(DEFAULT_INSTRUCTIONS)
     if instruction_size >= 7:
         extra_instruction.append(INSTRUCTIONS_6_TO_7)
     if instruction_size >= 9:
         extra_instruction.append(INSTRUCTIONS_8_TO_9)
     if instruction_size >= 11:
         extra_instruction.append(INSTRUCTIONS_10_TO_11)
-    if instruction_size >= 13:
-        extra_instruction.append(INSTRUCTIONS_12_TO_13)
 
     return """
     You are an SQL query generator. Given a question, you must generate a SQL query. If unsure do not assume the answer and give the default answer as "I don't know". Refer to the below context:
     [context]
-    
-    Also, Adhere to the following instructions:
-    1. The answer generated must only be an SQL query ending with delimiter ";"
-    2. make sure you use data only from the tables provided
-    3. Be aware of case-sensitive data and Make sure all the required data is taken from the required columns and tables.
-    4. Analyse the usage of JOINS if required between two or more tables. 
-    5. use SQL functions like 'wildcards', 'procedures', 'exists', and 'case' to simplify the query if needed. {extra_instructions}
-    
-    [examples]
+    {extra_instructions}
+
+    Hint: [hint]
 
     [question]
+
+    [examples]
     """.format(extra_instructions="".join(extra_instruction))
 
 
@@ -222,11 +232,45 @@ def initialize_files(model_file_path: str) -> Tuple[str, str]:
     return (output_file_path, metrics_file_path, log_file_path)
 
 
-def generate_gold_file(gold_file_list: Tuple[Any, Any], model_file_path: str) -> None:
+def generate_gold_file(
+    gold_file_list: Tuple[Any, Any], model_file_path: str, inference_size: int
+) -> None:
     query_list, db_id_list = gold_file_list
-    with open(f"{model_file_path}/gold.txt", "w") as f:
-        for i in range(len(query_list)):
-            f.write(f"{query_list[i]}\t{db_id_list[i]}\n\n")
+    with open(f"{model_file_path}/gold.txt", "w") as gold_file:
+        for index in range(len(query_list)):
+            gold_file.write(f"{query_list[index]}\t{db_id_list[index]}\n\n")
+    path_to_source_csv = f"../sql_data/bird_equal_split_{inference_size}.csv"
+    source_df = pd.read_csv(path_to_source_csv)
+
+    with open(f"{model_file_path}/dev_gold.sql", "w") as dev_gold_file:
+        for index in range(len(query_list)):
+            dev_gold_file.write(f"{query_list[index]}\t{db_id_list[index]}\n")
+    data_list = source_df.to_dict(orient="records")
+
+    with open(f"{model_file_path}/dev.json", "w") as json_file:
+        json.dump(data_list, json_file, indent=4)
+
+    with open(
+        f"{model_file_path}/predicted.txt", "r", encoding="utf8"
+    ) as predicted_file:
+        sql_queries = predicted_file.readlines()
+    with open(f"{model_file_path}/gold.txt", "r") as gold_file:
+        gold_query = gold_file.readlines()
+
+    queries_dict = {}
+    count = 0
+    for index, query in enumerate(sql_queries):
+        if query == "\n":
+            continue
+
+        db_id = gold_query[index].split("\t")[1]
+        queries_dict[count] = (
+            query.strip() + "\t----- bird -----\t" + db_id.replace("\n", "")
+        )
+        count += 1
+
+    with open(f"{model_file_path}/predict_dev.json", "w") as json_file:
+        json.dump(queries_dict, json_file, indent=4)
 
 
 def get_elapsed_time(time_in_sec: int) -> None:
@@ -283,7 +327,7 @@ def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any, Dict]:
         "--inst",
         dest="inst",
         type=str,
-        default="5,7,9,11,13",
+        default="0,5,7,9,11",
         help=(
             "A comma separated list of instructions set to include in the results, e.g. "
             "5,7,9. The models specifed will run inferences for these instruction sets alone"
@@ -294,10 +338,10 @@ def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any, Dict]:
         "--il",
         dest="inf_length",
         type=str,
-        default="50,100,200,400",
+        default="360",
         help=(
-            "A comma separated list of inferences to include for each results, currently supported inference lengths: "
-            "50,100,200,400. The models specifed will run inferences for these infernce-lengths alone"
+            "A comma separated list of inferences to include for each results "
+            "Example: 60, 120, 240, 360. The models specifed will run inferences for these infernce-lengths alone. Make sure that there is a csv which as the name specified as bird_equal_split_{your inference length}"
         ),
     )
     parser.add_argument(
@@ -319,26 +363,6 @@ def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any, Dict]:
         help="Name of the directory to store the compressed file",
     )
 
-    if host_env == Environments.SELF_HOSTED:
-        parser.add_argument(
-            "--enforce-eager",
-            type=bool,
-            default=False,
-            help="Name of the directory to store the compressed file",
-        )
-        parser.add_argument(
-            "--use-beam-search",
-            type=str,
-            default=False,
-            help="Name of the directory to store the compressed file",
-        )
-        parser.add_argument(
-            "--best_of",
-            type=str,
-            default=4,
-            help="Name of the directory to store the compressed file",
-        )
-
     parsed_args = parser.parse_args()
     parsed_args.target_dir = str(parsed_args.target_dir) + "/inference_results/"
 
@@ -346,7 +370,9 @@ def get_parsed_args(supported_models: Dict, host_env: str) -> Tuple[Any, Dict]:
     if parsed_args.model_instructions:
         for item in parsed_args.model_instructions.split("/"):
             model_key, inst_list_string = item.split("=")
-            model_instructions[model_key] = [int(inst) for inst in inst_list_string.split(",")]
+            model_instructions[model_key] = [
+                int(inst) for inst in inst_list_string.split(",")
+            ]
 
     return (parsed_args, model_instructions)
 

@@ -2,7 +2,7 @@ import os
 import boto3
 import json
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 import pathlib
 from common_functions import (
     get_datasets_info,
@@ -17,7 +17,7 @@ from common_functions import (
     multi_process_setup,
 )
 from typing import Any, Tuple, List
-from common_constants import Defaults, Environments, BedrockModels
+from common_constants import Defaults, Environments, BedrockModels, AmazonBedrock
 
 CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
 
@@ -30,8 +30,12 @@ AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 
 supported_models = {
-    "claude": BedrockModels.MODEL_ANTHROPIC_CLAUDE,
+    "claude2": BedrockModels.MODEL_ANTHROPIC_CLAUDE,
     "llama": BedrockModels.MODEL_META_LLAMA,
+    "claude3-sonnet": BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET,
+    "claude3-haiku": BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU,
+    "mistral": BedrockModels.MODEL_ANTHROPIC_MISTRAL_7B,
+    "mixtral": BedrockModels.MODEL_ANTHROPIC_MIXTRAL,
 }
 
 
@@ -56,7 +60,7 @@ def run_queries_on_bedrock(
     shot_size: str,
 ) -> None:
     try:
-        for context, question, hardness, db_id in total_user_query:
+        for context, question, hardness, db_id, evidence in total_user_query:
             data_to_log = {
                 "environment": HOST_ENV,
                 "model": model_name,
@@ -70,24 +74,47 @@ def run_queries_on_bedrock(
                 instruction_size, shot_size, db_id
             )
 
-            prompt = system_prompt.replace("[context]", context).replace(
-                "[question]", question
+            prompt = (
+                system_prompt.replace("[context]", context)
+                .replace("[question]", "Question: " + question)
+                .replace("[hint]", str(evidence))
             )
-            if model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE:
+
+            if model_name in [
+                BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET,
+                BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU,
+            ]:
+                body = {
+                    "anthropic_version": AmazonBedrock.CLAUDE3_MODEL_VERSION,
+                    "max_tokens": Defaults.MAX_TOKENS_TO_GENERATE,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [{"type": "text", "text": prompt}],
+                        }
+                    ],
+                }
+            elif model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE:
                 prompt = f"\n\nHuman: {prompt}\n\nAssistant:"
-
-            body = {"prompt": prompt}
-
-            if model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE:
-                body["max_tokens_to_sample"] = 3000
+                body = {"prompt": prompt}
+                body["max_tokens_to_sample"] = Defaults.MAX_TOKENS_TO_GENERATE
+            elif model_name in [
+                BedrockModels.MODEL_ANTHROPIC_MISTRAL_7B,
+                BedrockModels.MODEL_ANTHROPIC_MIXTRAL,
+            ]:
+                prompt = f"<s>[INST] {prompt}\n\n[/INST]"
+                body = {"prompt": prompt}
+                body["max_tokens"] = Defaults.MAX_TOKENS_TO_GENERATE
+            else:
+                body = {"prompt": prompt}
 
             data_to_log["request"] = body
 
-            response_time_start = datetime.now()
+            response_time_start = datetime.now(timezone.utc)
             bedrock_response = bedrock_runtime_client.invoke_model(
                 modelId=model_name, body=json.dumps(body)
             )
-            response_time_stop = datetime.now()
+            response_time_stop = datetime.now(timezone.utc)
             response_body = json.loads(bedrock_response["body"].read())
 
             # remove 'body' entry from bedrock_response due to 'StreamingBody is not JSON serializable' exception while logging
@@ -108,7 +135,17 @@ def run_queries_on_bedrock(
 
             if model_name == BedrockModels.MODEL_ANTHROPIC_CLAUDE:
                 llm_response_content = response_body["completion"]
-            else:
+            elif model_name in [
+                BedrockModels.MODEL_ANTHROPIC_MISTRAL_7B,
+                BedrockModels.MODEL_ANTHROPIC_MIXTRAL,
+            ]:
+                llm_response_content = response_body["outputs"][0]["text"]
+            elif model_name in [
+                BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_SONNET,
+                BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU,
+            ]:
+                llm_response_content = response_body["content"][0]["text"]
+            elif model_name == BedrockModels.MODEL_META_LLAMA:
                 llm_response_content = response_body["generation"]
 
             if "select" in llm_response_content.lower():
@@ -127,6 +164,12 @@ def run_queries_on_bedrock(
                 )
                 continue
 
+            data_to_log["response_time_start"] = response_time_start.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+            data_to_log["response_time_stop"] = response_time_stop.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
             data_to_log["is_sql"] = 1
             data_to_log["sql_response"] = sql_response
             log("SQL Response successful", data_to_log, log_file_path)
@@ -166,33 +209,68 @@ async def multi_process(
             file_shot_size = shot_size + "_shot"
 
         for dataset_length, query_list, gold_file_list in datasets_info:
-            model_file_path = f"{target_dir}/{HOST_ENV}/{file_shot_size}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
+            model_file_path = f"{target_dir}/{HOST_ENV}/{file_shot_size}/{model_name.replace(':','_')}/{instruction_size}_Instructions/{dataset_length}_Inferences"
 
-            output_file_path, metrics_file_path, log_file_path = initialize_files(
-                model_file_path
-            )
+            if os.path.exists(model_file_path) and os.path.isfile(
+                f"{model_file_path}/execution-log.jsonl"
+            ):
+                num_lines = 0
+                with open(f"{model_file_path}/execution-log.jsonl", "rb") as file:
+                    num_lines = sum(1 for _ in file)
 
-            print(
-                f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences"
-            )
-            loop_start_time = datetime.now()
-            run_queries_on_bedrock(
-                query_list,
-                output_file_path,
-                metrics_file_path,
-                log_file_path,
-                model_name,
-                bedrock_runtime_client,
-                instruction_size,
-                dataset_length,
-                file_shot_size,
-            )
-            generate_gold_file(gold_file_list, model_file_path)
-            loop_end_time = datetime.now()
-            total_secs = (loop_end_time - loop_start_time).total_seconds()
-            print(
-                f"Time taken for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences: {get_elapsed_time(total_secs)}"
-            )
+                if num_lines == dataset_length:
+                    continue
+                else:
+                    log_file_path = f"{model_file_path}/execution-log.jsonl"
+
+                    output_file_path = f"{model_file_path}/predicted.txt"
+                    metrics_file_path = f"{model_file_path}/metrics.csv"
+                    print(
+                        f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {num_lines}"
+                    )
+                    loop_start_time = datetime.now()
+                    run_queries_on_bedrock(
+                        query_list[num_lines:],
+                        output_file_path,
+                        metrics_file_path,
+                        log_file_path,
+                        model_name,
+                        bedrock_runtime_client,
+                        instruction_size,
+                        dataset_length,
+                        file_shot_size,
+                    )
+                    generate_gold_file(gold_file_list, model_file_path, dataset_length)
+                    loop_end_time = datetime.now()
+                    total_secs = (loop_end_time - loop_start_time).total_seconds()
+                    print(
+                        f"Time taken for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences: {get_elapsed_time(total_secs)}"
+                    )
+            else:
+                print(
+                    f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences"
+                )
+                output_file_path, metrics_file_path, log_file_path = initialize_files(
+                    model_file_path
+                )
+                loop_start_time = datetime.now()
+                run_queries_on_bedrock(
+                    query_list,
+                    output_file_path,
+                    metrics_file_path,
+                    log_file_path,
+                    model_name,
+                    bedrock_runtime_client,
+                    instruction_size,
+                    dataset_length,
+                    file_shot_size,
+                )
+                generate_gold_file(gold_file_list, model_file_path, dataset_length)
+                loop_end_time = datetime.now()
+                total_secs = (loop_end_time - loop_start_time).total_seconds()
+                print(
+                    f"Time taken for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences: {get_elapsed_time(total_secs)}"
+                )
 
 
 async def main() -> None:
