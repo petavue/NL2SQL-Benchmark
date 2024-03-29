@@ -10,7 +10,7 @@ from typing import Any, List, Tuple, Dict, Callable
 import json
 from ast import literal_eval
 import pathlib
-from common_constants import SelfHostedModels, Environments
+from common_constants import SelfHostedModels
 
 CURRENT_FILE_PATH = pathlib.Path(__file__).parent.resolve()
 
@@ -176,6 +176,13 @@ def generate_model_specific_prompt_for_self_hosted_model(
 
 
 def initialize_system_prompt(instruction_size: int) -> str:
+    DEFAULT_INSTRUCTIONS = """
+    Adhere to the following Instuction:
+    1. The answer generated must only be an SQL query ending with delimiter “;”
+    2. Dedicate time to understand the database schema fully, identifying the relevant tables and columns that align with the query’s objectives.
+    3. Utilize only the data from the specified tables in the provided database schema.
+    4. Pay attention to case sensitivity in data and ensure the extraction of required information aligns precisely with the specified columns and tables.
+    5. Analyze the query’s requirements to determine the appropriate use of GROUP BY, HAVING, and UNION clauses, ensuring they contribute to the accurate aggregation and segmentation of data."""
     INSTRUCTIONS_6_TO_7 = """
     6. Pay careful attention to the primary keys, foreign keys present in the database schema to determine appropriate columns for JOIN operations.
     7. Apply WHERE clause conditions accurately to filter the dataset based on specified criteria."""
@@ -187,6 +194,8 @@ def initialize_system_prompt(instruction_size: int) -> str:
     11. Avoid any write operations (like modify, update, delete, or drop). Should the task demand such actions, respond with a polite refusal, stating, “I’m sorry, but I can’t assist with that.”"""
 
     extra_instruction = []
+    if instruction_size >= 5:
+        extra_instruction.append(DEFAULT_INSTRUCTIONS)
     if instruction_size >= 7:
         extra_instruction.append(INSTRUCTIONS_6_TO_7)
     if instruction_size >= 9:
@@ -197,14 +206,8 @@ def initialize_system_prompt(instruction_size: int) -> str:
     return """
     You are an SQL query generator. Given a question, you must generate a SQL query. If unsure do not assume the answer and give the default answer as "I don't know". Refer to the below context:
     [context]
+    {extra_instructions}
 
-    Adhere to the following Instuction:
-    1. The answer generated must only be an SQL query ending with delimiter “;”
-    2. Dedicate time to understand the database schema fully, identifying the relevant tables and columns that align with the query’s objectives.
-    3. Utilize only the data from the specified tables in the provided database schema.
-    4. Pay attention to case sensitivity in data and ensure the extraction of required information aligns precisely with the specified columns and tables.
-    5. Analyze the query’s requirements to determine the appropriate use of GROUP BY, HAVING, and UNION clauses, ensuring they contribute to the accurate aggregation and segmentation of data. {extra_instructions}
-    
     Hint: [hint]
 
     [question]
