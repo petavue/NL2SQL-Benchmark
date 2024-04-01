@@ -3,8 +3,6 @@ import os
 import pathlib
 import asyncio
 from anthropic import Anthropic
-
-
 from common_functions import (
     get_datasets_info,
     initialize_files,
@@ -59,8 +57,19 @@ async def run_queries_on_anthropic(
                 "is_sql": 0,
             }
 
-            system_prompt = get_instruction_shot_specific_prompt(
+            system_prompt, examples = get_instruction_shot_specific_prompt(
                 instruction_size, shot_size, db_id
+            )
+
+            prompt = (
+                system_prompt.replace(
+                    "[context]",
+                    "Here is the schema of the tables which are needed for the SQL generation: \n"
+                    + context,
+                )
+                .replace("[question]", "Question: " + question)
+                .replace("[hint]", "Hint: " + str(evidence))
+                .replace("[examples]", examples)
             )
 
             req = [
@@ -69,9 +78,7 @@ async def run_queries_on_anthropic(
                     "content": [
                         {
                             "type": "text",
-                            "text": system_prompt.replace("[context]", context)
-                            .replace("[question]", f"Question: {question}")
-                            .replace("[hint]", str(evidence)),
+                            "text": prompt,
                         }
                     ],
                 },
@@ -152,20 +159,18 @@ async def multi_process(
 
         for dataset_length, query_list, gold_file_list in datasets_info:
             model_file_path = f"{target_dir}/{HOST_ENV}/{file_shot_size}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
-            if os.path.exists(model_file_path) and os.path.isfile(
-                f"{model_file_path}/execution-log.jsonl"
-            ):
+
+            output_file_path, metrics_file_path, log_file_path = initialize_files(
+                model_file_path, False
+            )
+            if os.path.exists(model_file_path) and os.path.isfile(log_file_path):
                 num_lines = 0
-                with open(f"{model_file_path}/execution-log.jsonl", "rb") as file:
+                with open(log_file_path, "rb") as file:
                     num_lines = sum(1 for _ in file)
 
                 if num_lines == dataset_length:
                     continue
                 else:
-                    log_file_path = f"{model_file_path}/execution-log.jsonl"
-
-                    output_file_path = f"{model_file_path}/predicted.txt"
-                    metrics_file_path = f"{model_file_path}/metrics.csv"
                     print(
                         f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {num_lines}"
                     )
