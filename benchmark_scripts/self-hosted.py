@@ -131,7 +131,7 @@ def run_queries_on_model(
 
             data_to_log["request"] = prompt
             inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
-            llm_prompt_tokens = len(inputs)
+            llm_prompt_tokens = len(inputs[0])
 
             response_time_start = datetime.now(timezone.utc)
             output = model.generate(

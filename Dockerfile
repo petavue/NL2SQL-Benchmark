@@ -8,6 +8,9 @@ RUN apt-get update && apt-get upgrade -y && \
     apt install --yes --no-install-recommends vim && \
     rm -rf /var/lib/apt/lists/*
 
+RUN pip uninstall -y traitlets && \ 
+    pip install traitlets==5.9.0 notebook
+
 # Set the working directory to /
 WORKDIR /
 
