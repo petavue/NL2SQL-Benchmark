@@ -44,6 +44,7 @@ supported_models = {
     "sqlc-70-a": SelfHostedModels.MODEL_DEFOG_SQLCODER_70B,
     "sqlc-7-2": SelfHostedModels.MODEL_DEFOG_SQLCODER_7B_2,
     "mistral-v2": SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B_V2,
+    "dbrx": SelfHostedModels.MODEL_DATABRICKS_DBRX,
 }
 
 model_tensor_types = {
@@ -55,6 +56,7 @@ model_tensor_types = {
     SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X7B: torch.bfloat16,
     SelfHostedModels.MODEL_WIZARDLM_WIZARD_CODER_33B: torch.bfloat16,
     SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B_V2: torch.bfloat16,
+    SelfHostedModels.MODEL_DATABRICKS_DBRX: torch.bfloat16,
 }
 
 
