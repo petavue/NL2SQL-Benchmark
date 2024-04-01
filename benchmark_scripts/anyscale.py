@@ -58,20 +58,20 @@ async def run_queries_on_anyscale(
                 "is_sql": 0,
             }
 
-            system_prompt = get_instruction_shot_specific_prompt(
+            system_prompt, examples = get_instruction_shot_specific_prompt(
                 instruction_size, shot_size, db_id
             )
 
             req = [
                 {
                     "role": "system",
-                    "content": system_prompt.replace("[context]", context)
+                    "content": system_prompt.replace("[context]", "")
                     .replace("[question]", "")
-                    .replace("[hint]", str(evidence)),
+                    .replace("[hint]", "").replace("[examples]", ""),
                 },
                 {
                     "role": "user",
-                    "content": f"{question}",
+                    "content": f"Question: {question} \n Hint: {str(evidence)} \n Here is the schema of the tables which are needed for the SQL generation: \n {context}\n {examples}",
                 },
             ]
             data_to_log["request"] = req

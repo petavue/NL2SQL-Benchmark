@@ -95,9 +95,9 @@ def get_shot_samples_data(file_shot_size: str) -> List:
     return few_shot_samples
 
 
-def get_few_shot_sample_string(shot_size: str, db_id: str, prompt: str) -> str:
+def get_few_shot_sample_string(shot_size: str, db_id: str) -> str:
     if shot_size == "0_shot":
-        return prompt.replace("[examples]", "")
+        return ""
 
     few_shot_sample_dict = get_shot_samples_data(shot_size)
     samples_list = few_shot_sample_dict[db_id]
@@ -116,7 +116,7 @@ def get_few_shot_sample_string(shot_size: str, db_id: str, prompt: str) -> str:
                 samples_list,
             )
         )
-    samples_prompt = prompt.replace("[examples]", "".join(parsed_str))
+    samples_prompt = "Examples: \n"+parsed_str
     return samples_prompt
 
 
@@ -124,35 +124,36 @@ def get_instruction_shot_specific_prompt(
     instruction_size: int, shot_size: str, db_id: str
 ) -> str:
     instructions_prompt = initialize_system_prompt(instruction_size)
-    return get_few_shot_sample_string(shot_size, db_id, instructions_prompt)
+    return instructions_prompt , get_few_shot_sample_string(shot_size, db_id)
 
 
 def generate_model_specific_prompt_for_self_hosted_model(
-    model_name: str, system_prompt: str, context: str, question: str, evidence: str
+    model_name: str, system_prompt: str, context: str, question: str, evidence: str,examples: str
 ) -> str:
     if model_name == SelfHostedModels.MODEL_META_CODELLAMA_70B:
         system_prompt = (
-            system_prompt.replace("[context]", context)
-            .replace("[question]", "")
-            .replace("[hint]", str(evidence))
+                    system_prompt.replace("[context]", "")
+                    .replace("[question]", "")
+                    .replace("[hint]", "").replace("[examples]", ""),
         )
-        prompt = f"<s>Source: system\n\n {system_prompt} <step> Source: user\n\n {question} <step> Source: assistant\nDestination: user\n\n "
+        prompt = f"<s>Source: system\n\n {system_prompt} <step> Source: user\n\n Question: {question} \n Hint: {str(evidence)} \n Here is the schema of the tables which are needed for the SQL generation: \n {context}\n {examples}  <step> Source: assistant\nDestination: user\n\n "
+        
     elif model_name == SelfHostedModels.MODEL_WIZARDLM_WIZARD_CODER_33B:
         system_prompt = (
-            system_prompt.replace("[context]", context)
-            .replace("[question]", "")
-            .replace("[hint]", str(evidence))
+                system_prompt.replace("[context]", "Here is the schema of the tables which are needed for the SQL generation: \n"+context)
+                .replace("[question]", "Question: " + question)
+                .replace("[hint]", "Hint: "+ str(evidence)).replace("[examples]",examples)
         )
-        prompt = f"Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{system_prompt} QUESTION: {question} \n\n### Response:"
+        prompt = f"Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{system_prompt} \n\n### Response:"
     elif model_name in [
         SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B,
         SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X7B,
         SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B_V2,
     ]:
         system_prompt = (
-            system_prompt.replace("[context]", context)
-            .replace("[question]", question)
-            .replace("[hint]", str(evidence))
+                system_prompt.replace("[context]", "Here is the schema of the tables which are needed for the SQL generation: \n"+context)
+                .replace("[question]", "Question: " + question)
+                .replace("[hint]", "Hint: "+ str(evidence)).replace("[examples]",examples)
         )
         prompt = f"<s> [INST] {system_prompt} [/INST]"
     elif model_name in [
@@ -160,16 +161,16 @@ def generate_model_specific_prompt_for_self_hosted_model(
         SelfHostedModels.MODEL_DEFOG_SQLCODER_7B_2,
     ]:
         system_prompt = (
-            system_prompt.replace("[context]", context)
+            system_prompt.replace("[context]", "")
             .replace("[question]", "")
-            .replace("[hint]", str(evidence))
+            .replace("[hint]", "").replace("[examples]", ""),
         )
-        prompt = f"### Task \nGenerate a SQL query to answer [QUESTION]{question}[/QUESTION]### Database Schema \nThe query will run on a database with the following schema:{system_prompt} ### Answer \nGiven the database schema, here is the SQL query that [QUESTION]{question}[/QUESTION] \n[SQL]"
+        prompt = f"### Task \nGenerate a SQL query to answer [QUESTION]{question} \nHint: {str(evidence)}[/QUESTION]### Instructions \n{system_prompt}### Database Schema \nThe query will run on a database with the following schema: {context} ### Answer \nGiven the database schema, here is the SQL query that [QUESTION]{question} \nHint: {str(evidence)}[/QUESTION] {examples} \n[SQL]"
     else:
         prompt = (
             system_prompt.replace("[context]", context)
             .replace("[question]", question)
-            .replace("[hint]", str(evidence))
+            .replace("[hint]", str(evidence)).replace("[examples]",examples)
         )
 
     return prompt
@@ -204,15 +205,17 @@ def initialize_system_prompt(instruction_size: int) -> str:
         extra_instruction.append(INSTRUCTIONS_10_TO_11)
 
     return """
-    You are an SQL query generator. Given a question, you must generate a SQL query. If unsure do not assume the answer and give the default answer as "I don't know". Refer to the below context:
-    [context]
+    You are an SQL query generator. Given a question, you must generate a SQL query. If unsure do not assume the answer and give the default answer as "I don't know".
     {extra_instructions}
-
-    Hint: [hint]
-
+    
     [question]
 
+    [hint]
+
+    [context]
+
     [examples]
+
     """.format(extra_instructions="".join(extra_instruction))
 
 
