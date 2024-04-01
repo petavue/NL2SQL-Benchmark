@@ -65,7 +65,7 @@ async def multi_process_setup(
 
 def get_datasets_info(
     dataset_length_list: List[int],
-) -> Tuple[List, List]:
+) -> Tuple[List, List, Tuple]:
     datasets_info = []
     for dataset_length in dataset_length_list:
         output_file_path = f"../sql_data/bird_equal_split_{str(dataset_length)}.csv"
@@ -116,7 +116,7 @@ def get_few_shot_sample_string(shot_size: str, db_id: str) -> str:
                 samples_list,
             )
         )
-    samples_prompt = "Examples: \n"+parsed_str
+    samples_prompt = "Examples: \n" + parsed_str
     return samples_prompt
 
 
@@ -124,25 +124,36 @@ def get_instruction_shot_specific_prompt(
     instruction_size: int, shot_size: str, db_id: str
 ) -> str:
     instructions_prompt = initialize_system_prompt(instruction_size)
-    return instructions_prompt , get_few_shot_sample_string(shot_size, db_id)
+    return instructions_prompt, get_few_shot_sample_string(shot_size, db_id)
 
 
 def generate_model_specific_prompt_for_self_hosted_model(
-    model_name: str, system_prompt: str, context: str, question: str, evidence: str,examples: str
+    model_name: str,
+    system_prompt: str,
+    context: str,
+    question: str,
+    evidence: str,
+    examples: str,
 ) -> str:
     if model_name == SelfHostedModels.MODEL_META_CODELLAMA_70B:
         system_prompt = (
-                    system_prompt.replace("[context]", "")
-                    .replace("[question]", "")
-                    .replace("[hint]", "").replace("[examples]", ""),
+            system_prompt.replace("[context]", "")
+            .replace("[question]", "")
+            .replace("[hint]", "")
+            .replace("[examples]", ""),
         )
         prompt = f"<s>Source: system\n\n {system_prompt} <step> Source: user\n\n Question: {question} \n Hint: {str(evidence)} \n Here is the schema of the tables which are needed for the SQL generation: \n {context}\n {examples}  <step> Source: assistant\nDestination: user\n\n "
-        
+
     elif model_name == SelfHostedModels.MODEL_WIZARDLM_WIZARD_CODER_33B:
         system_prompt = (
-                system_prompt.replace("[context]", "Here is the schema of the tables which are needed for the SQL generation: \n"+context)
-                .replace("[question]", "Question: " + question)
-                .replace("[hint]", "Hint: "+ str(evidence)).replace("[examples]",examples)
+            system_prompt.replace(
+                "[context]",
+                "Here is the schema of the tables which are needed for the SQL generation: \n"
+                + context,
+            )
+            .replace("[question]", "Question: " + question)
+            .replace("[hint]", "Hint: " + str(evidence))
+            .replace("[examples]", examples)
         )
         prompt = f"Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{system_prompt} \n\n### Response:"
     elif model_name in [
@@ -151,9 +162,14 @@ def generate_model_specific_prompt_for_self_hosted_model(
         SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B_V2,
     ]:
         system_prompt = (
-                system_prompt.replace("[context]", "Here is the schema of the tables which are needed for the SQL generation: \n"+context)
-                .replace("[question]", "Question: " + question)
-                .replace("[hint]", "Hint: "+ str(evidence)).replace("[examples]",examples)
+            system_prompt.replace(
+                "[context]",
+                "Here is the schema of the tables which are needed for the SQL generation: \n"
+                + context,
+            )
+            .replace("[question]", "Question: " + question)
+            .replace("[hint]", "Hint: " + str(evidence))
+            .replace("[examples]", examples)
         )
         prompt = f"<s> [INST] {system_prompt} [/INST]"
     elif model_name in [
@@ -163,14 +179,16 @@ def generate_model_specific_prompt_for_self_hosted_model(
         system_prompt = (
             system_prompt.replace("[context]", "")
             .replace("[question]", "")
-            .replace("[hint]", "").replace("[examples]", ""),
+            .replace("[hint]", "")
+            .replace("[examples]", ""),
         )
         prompt = f"### Task \nGenerate a SQL query to answer [QUESTION]{question} \nHint: {str(evidence)}[/QUESTION]### Instructions \n{system_prompt}### Database Schema \nThe query will run on a database with the following schema: {context} ### Answer \nGiven the database schema, here is the SQL query that [QUESTION]{question} \nHint: {str(evidence)}[/QUESTION] {examples} \n[SQL]"
     else:
         prompt = (
             system_prompt.replace("[context]", context)
             .replace("[question]", question)
-            .replace("[hint]", str(evidence)).replace("[examples]",examples)
+            .replace("[hint]", str(evidence))
+            .replace("[examples]", examples)
         )
 
     return prompt
@@ -219,14 +237,19 @@ def initialize_system_prompt(instruction_size: int) -> str:
     """.format(extra_instructions="".join(extra_instruction))
 
 
-def initialize_files(model_file_path: str) -> Tuple[str, str]:
+def initialize_files(
+    model_file_path: str, should_initialize_files=True
+) -> Tuple[str, str, str]:
     if not os.path.exists(model_file_path):
         os.makedirs(model_file_path)
 
     log_file_path = f"{model_file_path}/execution-log.jsonl"
-
     output_file_path = f"{model_file_path}/predicted.txt"
     metrics_file_path = f"{model_file_path}/metrics.csv"
+
+    if not should_initialize_files:
+        return (output_file_path, metrics_file_path, log_file_path)
+
     metrics_file = open(metrics_file_path, "w", encoding="utf-8")
     metrics_file.write("response_time,llm_prompt_tokens,llm_response_tokens,hardness\n")
 
@@ -276,7 +299,7 @@ def generate_gold_file(
         json.dump(queries_dict, json_file, indent=4)
 
 
-def get_elapsed_time(time_in_sec: int) -> None:
+def get_elapsed_time(time_in_sec: int) -> str:
     minutes = time_in_sec // 60.0
     sec = time_in_sec % 60.0
     hr = minutes // 60.0

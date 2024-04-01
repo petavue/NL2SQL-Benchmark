@@ -14,10 +14,13 @@ WORKDIR /
 # Clone the Fooocus repository into the workspace directory
 RUN git clone https://github.com/petavue/llm-research.git
 
-# Change the working directory to /workspace/llm-research/benchmark_scripts
-WORKDIR /llm-research/benchmark_scripts
+# Change the working directory to /workspace/llm-research
+WORKDIR /llm-research
 
 # Install Python dependencies
 # Using '--no-cache-dir' with pip to avoid use of cache
 RUN pip install --no-cache-dir xformers==0.0.22 \
     && pip install --no-cache-dir -r requirements.txt
+
+# Change the working directory to /workspace/llm-research/benchmark_scripts
+WORKDIR /llm-research/benchmark_scripts

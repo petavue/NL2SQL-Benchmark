@@ -124,7 +124,7 @@ def run_queries_on_model(
             )
 
             prompt = generate_model_specific_prompt_for_self_hosted_model(
-                model_name, system_prompt, context, question, evidence,examples
+                model_name, system_prompt, context, question, evidence, examples
             )
 
             data_to_log["request"] = prompt
@@ -207,7 +207,7 @@ def run_inferences() -> None:
 
         model_name = supported_models[model_name_from_args]
         tokenizer, model = initialize_model_and_tokenizer(model_name)
-    
+
         for shot_size in shot_size_list:
             if "cot" in shot_size:
                 file_shot_size = shot_size.split("-")[0] + "_shot_cot"
@@ -218,26 +218,57 @@ def run_inferences() -> None:
                 for dataset_length, query_list, gold_file_list in datasets_info:
                     model_file_path = f"{args.target_dir}/{HOST_ENV}/{file_shot_size}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
 
-                if os.path.exists(model_file_path) and os.path.isfile(
-                    f"{model_file_path}/execution-log.jsonl"
-                ):
-                    num_lines = 0
-                    with open(f"{model_file_path}/execution-log.jsonl", "rb") as file:
-                        num_lines = sum(1 for _ in file)
+                    output_file_path, metrics_file_path, log_file_path = (
+                        initialize_files(model_file_path, False)
+                    )
+                    if os.path.exists(model_file_path) and os.path.isfile(
+                        log_file_path
+                    ):
+                        num_lines = 0
+                        with open(log_file_path, "rb") as file:
+                            num_lines = sum(1 for _ in file)
 
-                    if num_lines == dataset_length:
-                        continue
+                        if num_lines == dataset_length:
+                            continue
+                        else:
+                            print(
+                                f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {num_lines}"
+                            )
+                            loop_start_time = datetime.now()
+                            run_queries_on_model(
+                                query_list[num_lines:],
+                                output_file_path,
+                                metrics_file_path,
+                                log_file_path,
+                                model_name,
+                                instruction_size,
+                                dataset_length,
+                                file_shot_size,
+                                model,
+                                tokenizer,
+                            )
+                            generate_gold_file(
+                                gold_file_list, model_file_path, dataset_length
+                            )
+                            loop_end_time = datetime.now()
+                            total_secs = (
+                                loop_end_time - loop_start_time
+                            ).total_seconds()
+                            print(
+                                f"Time taken for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences: {get_elapsed_time(total_secs)}"
+                            )
+
                     else:
-                        log_file_path = f"{model_file_path}/execution-log.jsonl"
+                        output_file_path, metrics_file_path, log_file_path = (
+                            initialize_files(model_file_path)
+                        )
 
-                        output_file_path = f"{model_file_path}/predicted.txt"
-                        metrics_file_path = f"{model_file_path}/metrics.csv"
                         print(
-                            f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {num_lines}"
+                            f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences"
                         )
                         loop_start_time = datetime.now()
                         run_queries_on_model(
-                            query_list[num_lines:],
+                            query_list,
                             output_file_path,
                             metrics_file_path,
                             log_file_path,
@@ -256,34 +287,6 @@ def run_inferences() -> None:
                         print(
                             f"Time taken for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences: {get_elapsed_time(total_secs)}"
                         )
-
-                else:
-                    output_file_path, metrics_file_path, log_file_path = (
-                        initialize_files(model_file_path)
-                    )
-
-                    print(
-                        f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences"
-                    )
-                    loop_start_time = datetime.now()
-                    run_queries_on_model(
-                        query_list,
-                        output_file_path,
-                        metrics_file_path,
-                        log_file_path,
-                        model_name,
-                        instruction_size,
-                        dataset_length,
-                        file_shot_size,
-                        model,
-                        tokenizer,
-                    )
-                    generate_gold_file(gold_file_list, model_file_path, dataset_length)
-                    loop_end_time = datetime.now()
-                    total_secs = (loop_end_time - loop_start_time).total_seconds()
-                    print(
-                        f"Time taken for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences: {get_elapsed_time(total_secs)}"
-                    )
 
 
 if __name__ == "__main__":

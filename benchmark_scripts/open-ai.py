@@ -6,7 +6,6 @@ import asyncio
 from common_functions import (
     get_datasets_info,
     get_instruction_shot_specific_prompt,
-    initialize_system_prompt,
     initialize_files,
     generate_gold_file,
     write_to_file,
@@ -14,7 +13,6 @@ from common_functions import (
     get_elapsed_time,
     sql_match,
     get_parsed_args,
-    get_few_shot_sample_string,
     multi_process_setup,
 )
 from typing import Tuple, List, Any
@@ -57,7 +55,6 @@ async def run_queries_on_open_ai(
                 "is_sql": 0,
             }
 
-
             system_prompt, examples = get_instruction_shot_specific_prompt(
                 instruction_size, shot_size, db_id
             )
@@ -67,7 +64,8 @@ async def run_queries_on_open_ai(
                     "role": "system",
                     "content": system_prompt.replace("[context]", "")
                     .replace("[question]", "")
-                    .replace("[hint]", "").replace("[examples]", ""),
+                    .replace("[hint]", "")
+                    .replace("[examples]", ""),
                 },
                 {
                     "role": "user",
@@ -151,20 +149,17 @@ async def multi_process(
         for dataset_length, query_list, gold_file_list in datasets_info:
             model_file_path = f"{target_dir}/{HOST_ENV}/{file_shot_size}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
 
-            if os.path.exists(model_file_path) and os.path.isfile(
-                f"{model_file_path}/execution-log.jsonl"
-            ):
+            output_file_path, metrics_file_path, log_file_path = initialize_files(
+                model_file_path, False
+            )
+            if os.path.exists(model_file_path) and os.path.isfile(log_file_path):
                 num_lines = 0
-                with open(f"{model_file_path}/execution-log.jsonl", "rb") as file:
+                with open(log_file_path, "rb") as file:
                     num_lines = sum(1 for _ in file)
 
                 if num_lines == dataset_length:
                     continue
                 else:
-                    log_file_path = f"{model_file_path}/execution-log.jsonl"
-
-                    output_file_path = f"{model_file_path}/predicted.txt"
-                    metrics_file_path = f"{model_file_path}/metrics.csv"
                     print(
                         f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {num_lines}"
                     )

@@ -67,7 +67,8 @@ async def run_queries_on_anyscale(
                     "role": "system",
                     "content": system_prompt.replace("[context]", "")
                     .replace("[question]", "")
-                    .replace("[hint]", "").replace("[examples]", ""),
+                    .replace("[hint]", "")
+                    .replace("[examples]", ""),
                 },
                 {
                     "role": "user",
@@ -151,20 +152,17 @@ async def multi_process(
         for dataset_length, query_list, gold_file_list in datasets_info:
             model_file_path = f"{target_dir}/{HOST_ENV}/{file_shot_size}/{model_name}/{instruction_size}_Instructions/{dataset_length}_Inferences"
 
-            if os.path.exists(model_file_path) and os.path.isfile(
-                f"{model_file_path}/execution-log.jsonl"
-            ):
+            output_file_path, metrics_file_path, log_file_path = initialize_files(
+                model_file_path, False
+            )
+            if os.path.exists(model_file_path) and os.path.isfile(log_file_path):
                 num_lines = 0
-                with open(f"{model_file_path}/execution-log.jsonl", "rb") as file:
+                with open(log_file_path, "rb") as file:
                     num_lines = sum(1 for _ in file)
 
                 if num_lines == dataset_length:
                     continue
                 else:
-                    log_file_path = f"{model_file_path}/execution-log.jsonl"
-
-                    output_file_path = f"{model_file_path}/predicted.txt"
-                    metrics_file_path = f"{model_file_path}/metrics.csv"
                     print(
                         f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {num_lines}"
                     )
