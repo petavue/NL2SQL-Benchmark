@@ -207,7 +207,7 @@ def run_inferences() -> None:
 
         model_name = supported_models[model_name_from_args]
         tokenizer, model = initialize_model_and_tokenizer(model_name)
-
+    
         for shot_size in shot_size_list:
             if "cot" in shot_size:
                 file_shot_size = shot_size.split("-")[0] + "_shot_cot"
