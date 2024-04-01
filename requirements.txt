@@ -11,4 +11,5 @@ bitsandbytes
 scipy
 xformers
 sentencepiece
+tiktoken
 vllm==0.3.3
