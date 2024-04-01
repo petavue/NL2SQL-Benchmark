@@ -59,8 +59,14 @@ async def run_queries_on_anthropic(
                 "is_sql": 0,
             }
 
-            system_prompt = get_instruction_shot_specific_prompt(
+            system_prompt, examples = get_instruction_shot_specific_prompt(
                 instruction_size, shot_size, db_id
+            )
+            
+            prompt = (
+                system_prompt.replace("[context]", "Here is the schema of the tables which are needed for the SQL generation: \n"+context)
+                .replace("[question]", "Question: " + question)
+                .replace("[hint]", "Hint: "+ str(evidence)).replace("[examples]",examples)
             )
 
             req = [
@@ -69,9 +75,7 @@ async def run_queries_on_anthropic(
                     "content": [
                         {
                             "type": "text",
-                            "text": system_prompt.replace("[context]", context)
-                            .replace("[question]", f"Question: {question}")
-                            .replace("[hint]", str(evidence)),
+                            "text": prompt,
                         }
                     ],
                 },

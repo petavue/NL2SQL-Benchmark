@@ -56,14 +56,14 @@ async def run_queries_on_gemini(
                 "is_sql": 0,
             }
 
-            system_prompt = get_instruction_shot_specific_prompt(
+            system_prompt, examples = get_instruction_shot_specific_prompt(
                 instruction_size, shot_size, db_id
             )
 
             req = (
-                system_prompt.replace("[context]", context)
+                system_prompt.replace("[context]", "Here is the schema of the tables which are needed for the SQL generation: \n"+context)
                 .replace("[question]", "Question: " + question)
-                .replace("[hint]", str(evidence))
+                .replace("[hint]", "Hint: "+ str(evidence)).replace("[examples]",examples)
             )
 
             data_to_log["request"] = req

@@ -96,7 +96,7 @@ def test_model(tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, model: 
 
 
 def run_queries_on_model(
-    total_user_query: Tuple[str, str, str],
+    total_user_query: Tuple,
     output_file_path: str,
     metrics_file_path: str,
     log_file_path: str,
@@ -119,11 +119,12 @@ def run_queries_on_model(
                 "is_sql": 0,
             }
 
-            system_prompt = get_instruction_shot_specific_prompt(
+            system_prompt, examples = get_instruction_shot_specific_prompt(
                 instruction_size, shot_size, db_id
             )
+
             prompt = generate_model_specific_prompt_for_self_hosted_model(
-                model_name, system_prompt, context, question, evidence
+                model_name, system_prompt, context, question, evidence,examples
             )
 
             data_to_log["request"] = prompt
