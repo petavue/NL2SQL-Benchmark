@@ -140,7 +140,7 @@ def generate_model_specific_prompt_for_self_hosted_model(
             system_prompt.replace("[context]", "")
             .replace("[question]", "")
             .replace("[hint]", "")
-            .replace("[examples]", ""),
+            .replace("[examples]", "")
         )
         prompt = f"<s>Source: system\n\n {system_prompt} <step> Source: user\n\n Question: {question} \n Hint: {str(evidence)} \n Here is the schema of the tables which are needed for the SQL generation: \n {context}\n {examples}  <step> Source: assistant\nDestination: user\n\n "
 
@@ -180,7 +180,7 @@ def generate_model_specific_prompt_for_self_hosted_model(
             system_prompt.replace("[context]", "")
             .replace("[question]", "")
             .replace("[hint]", "")
-            .replace("[examples]", ""),
+            .replace("[examples]", "")
         )
         prompt = f"### Task \nGenerate a SQL query to answer [QUESTION]{question} \nHint: {str(evidence)}[/QUESTION]### Instructions \n{system_prompt}### Database Schema \nThe query will run on a database with the following schema: {context} ### Answer \nGiven the database schema, here is the SQL query that [QUESTION]{question} \nHint: {str(evidence)}[/QUESTION] {examples} \n[SQL]"
 
@@ -189,7 +189,7 @@ def generate_model_specific_prompt_for_self_hosted_model(
             system_prompt.replace("[context]", "")
             .replace("[question]", "")
             .replace("[hint]", "")
-            .replace("[examples]", ""),
+            .replace("[examples]", "")
         )
         prompt = f"<|im_start|>system\n {system_prompt} <|im_end|>\n <|im_start|>user\n Question: {question} \n Hint: {str(evidence)} \n Here is the schema of the tables which are needed for the SQL generation: \n {context}\n {examples} <|im_end|>\n"
 
