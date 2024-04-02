@@ -12,4 +12,5 @@ scipy
 xformers
 sentencepiece
 tiktoken
+google-api-python-client
 vllm==0.3.3

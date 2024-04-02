@@ -164,7 +164,7 @@ async def multi_process(
                     continue
                 else:
                     print(
-                        f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {num_lines}"
+                        f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {num_lines+1}"
                     )
                     loop_start_time = datetime.now()
                     await run_queries_on_anyscale(

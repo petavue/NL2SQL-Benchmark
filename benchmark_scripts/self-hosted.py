@@ -65,16 +65,25 @@ def initialize_model_and_tokenizer(
 ) -> Tuple[PreTrainedTokenizer | PreTrainedTokenizerFast, Any]:
     # Create tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
-        model_name, cache_dir=SelfHosted.MODEL_WEIGHTS_DIRECTORY, token=auth_token
+        model_name,
+        cache_dir=SelfHosted.MODEL_WEIGHTS_DIRECTORY,
+        token=auth_token,
+        trust_remote_code=model_name == SelfHostedModels.MODEL_DATABRICKS_DBRX,
     )
+
+    if model_name == SelfHostedModels.MODEL_DATABRICKS_DBRX:
+        gpu_max_memory = {0: "80GB", 1: "160GB", 2: "240GB", 3: "320GB"}
+    else:
+        gpu_max_memory = {0: "40GB", 1: "40GB", 2: "40GB", 3: "80GB"}
 
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         device_map="auto",
-        max_memory={0: "40GB", 1: "40GB", 2: "40GB", 3: "80GB"},
+        max_memory=gpu_max_memory,
         cache_dir=SelfHosted.MODEL_WEIGHTS_DIRECTORY,
         token=auth_token,
         torch_dtype=model_tensor_types[model_name],
+        trust_remote_code=model_name == SelfHostedModels.MODEL_DATABRICKS_DBRX,
     )
 
     return (tokenizer, model)
@@ -109,7 +118,8 @@ def run_queries_on_model(
     model: Any,
     tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
 ) -> None:
-    for context, question, hardness, db_id, evidence in total_user_query:
+    for index, user_query_data in enumerate(total_user_query):
+        context, question, hardness, db_id, evidence = user_query_data
         torch.cuda.empty_cache()
         try:
             data_to_log = {
@@ -125,13 +135,39 @@ def run_queries_on_model(
                 instruction_size, shot_size, db_id
             )
 
-            prompt = generate_model_specific_prompt_for_self_hosted_model(
-                model_name, system_prompt, context, question, evidence, examples
-            )
+            if model_name == SelfHostedModels.MODEL_DATABRICKS_DBRX:
+                prompt = [
+                    {
+                        "role": "system",
+                        "content": system_prompt.replace(
+                            "[context]",
+                            "Here is the schema of the tables which are needed for the SQL generation: \n"
+                            + context,
+                        )
+                        .replace("[question]", "")
+                        .replace("[hint]", "Hint: " + str(evidence))
+                        .replace("[examples]", examples),
+                    },
+                    {"role": "user", "content": question},
+                ]
+                inputs = tokenizer.apply_chat_template(
+                    prompt,
+                    return_dict=True,
+                    tokenize=True,
+                    add_generation_prompt=True,
+                    return_tensors="pt",
+                ).to("cuda")
+                llm_prompt_tokens = len(inputs.input_ids[0])
+
+            else:
+                prompt = generate_model_specific_prompt_for_self_hosted_model(
+                    model_name, system_prompt, context, question, evidence, examples
+                )
+                inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+                llm_prompt_tokens = len(inputs[0])
 
             data_to_log["request"] = prompt
-            inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
-            llm_prompt_tokens = len(inputs[0])
+            print(f"Completed tokenization step for record '{index+1}'")
 
             response_time_start = datetime.now(timezone.utc)
             output = model.generate(
@@ -141,6 +177,7 @@ def run_queries_on_model(
                 pad_token_id=tokenizer.eos_token_id,
             )
             response_time_stop = datetime.now(timezone.utc)
+            print(f"Completed output generation step for record '{index+1}'")
 
             llm_response_content = tokenizer.decode(output[0], skip_special_tokens=True)
             llm_response_tokens = len(output[0])
@@ -179,14 +216,19 @@ def run_queries_on_model(
                 f"{sql_response}\n\n",
                 f"{response_time},{llm_prompt_tokens},{llm_response_tokens},{hardness}\n",
             )
+            print(
+                f"Completed inferencing for record '{index+1}' in {response_time} secs"
+            )
         except Exception as ex:
+            print(f"Error during inferencing for record: {index+1}")
+            exception = str(ex)
             data_to_log["severity"] = "error"
-            log(ex, data_to_log, log_file_path)
-            print("exception: ", ex)
+            log(exception, data_to_log, log_file_path)
+            print("exception: ", exception)
             write_to_file(
                 output_file_path,
                 metrics_file_path,
-                f"An error occurred: {ex}\n\n",
+                f"An error occurred: {exception}\n\n",
                 f"{0},{0},{0},{hardness}\n",
             )
 
@@ -234,7 +276,7 @@ def run_inferences() -> None:
                             continue
                         else:
                             print(
-                                f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {num_lines}"
+                                f"Starting loop for {model_name} - {file_shot_size} prompt - {instruction_size} instructions - {dataset_length} inferences - resuming from {num_lines+1}"
                             )
                             loop_start_time = datetime.now()
                             run_queries_on_model(
