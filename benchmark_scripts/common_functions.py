@@ -183,21 +183,15 @@ def generate_model_specific_prompt_for_self_hosted_model(
             .replace("[examples]", "")
         )
         prompt = f"### Task \nGenerate a SQL query to answer [QUESTION]{question} \nHint: {str(evidence)}[/QUESTION]### Instructions \n{system_prompt}### Database Schema \nThe query will run on a database with the following schema: {context} ### Answer \nGiven the database schema, here is the SQL query that [QUESTION]{question} \nHint: {str(evidence)}[/QUESTION] {examples} \n[SQL]"
-
-    elif model_name in [SelfHostedModels.MODEL_DATABRICKS_DBRX]:
-        system_prompt = (
-            system_prompt.replace("[context]", "")
-            .replace("[question]", "")
-            .replace("[hint]", "")
-            .replace("[examples]", "")
-        )
-        prompt = f"<|im_start|>system\n {system_prompt} <|im_end|>\n <|im_start|>user\n Question: {question} \n Hint: {str(evidence)} \n Here is the schema of the tables which are needed for the SQL generation: \n {context}\n {examples} <|im_end|>\n"
-
     else:
         prompt = (
-            system_prompt.replace("[context]", context)
-            .replace("[question]", question)
-            .replace("[hint]", str(evidence))
+            system_prompt.replace(
+                "[context]",
+                "Here is the schema of the tables which are needed for the SQL generation: \n"
+                + context,
+            )
+            .replace("[question]", "Question: " + question)
+            .replace("[hint]", "Hint: " + str(evidence))
             .replace("[examples]", examples)
         )
 
@@ -235,7 +229,7 @@ def initialize_system_prompt(instruction_size: int) -> str:
     return """
     You are an SQL query generator. Given a question, you must generate a SQL query. If unsure do not assume the answer and give the default answer as "I don't know".
     {extra_instructions}
-    
+
     [question]
 
     [hint]
