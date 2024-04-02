@@ -164,7 +164,7 @@ def run_queries_on_model(
                     model_name, system_prompt, context, question, evidence, examples
                 )
                 inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
-                llm_prompt_tokens = len(inputs[0])
+                llm_prompt_tokens =len(inputs[0])
 
             data_to_log["request"] = prompt
             print(f"Completed tokenization step for record '{index+1}'")
