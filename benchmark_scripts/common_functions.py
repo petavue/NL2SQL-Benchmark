@@ -143,7 +143,18 @@ def generate_model_specific_prompt_for_self_hosted_model(
             .replace("[examples]", "")
         )
         prompt = f"<s>Source: system\n\n {system_prompt} <step> Source: user\n\n Question: {question} \n Hint: {str(evidence)} \n Here is the schema of the tables which are needed for the SQL generation: \n {context}\n {examples}  <step> Source: assistant\nDestination: user\n\n "
-
+    elif model_name in [
+        SelfHostedModels.MODEL_META_CODELLAMA_34B]:
+        system_prompt = (
+            system_prompt.replace(
+                "[context]","")
+            .replace("[question]", "")
+            .replace("[hint]", "")
+            .replace("[examples]", "")
+        )
+        prompt = f"<<SYS>>\n {system_prompt}\n<<SYS>>\n\n[INST] Question: {question}\nHint: {str(evidence)}\nHere is the schema of the tables which are needed for the SQL generation: \n {context}\n {examples}[/INST]"
+    
+    
     elif model_name == SelfHostedModels.MODEL_WIZARDLM_WIZARD_CODER_33B:
         system_prompt = (
             system_prompt.replace(

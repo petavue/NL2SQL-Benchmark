@@ -139,16 +139,11 @@ def run_queries_on_model(
                 prompt = [
                     {
                         "role": "system",
-                        "content": system_prompt.replace(
-                            "[context]",
-                            "Here is the schema of the tables which are needed for the SQL generation: \n"
-                            + context,
-                        )
-                        .replace("[question]", "")
-                        .replace("[hint]", "Hint: " + str(evidence))
-                        .replace("[examples]", examples),
+                    "content": system_prompt.replace("[context]", "")
+                    .replace("[question]", "")
+                    .replace("[hint]", "").replace("[examples]", ""),
                     },
-                    {"role": "user", "content": question},
+                    {"role": "user", "content": f"Question: {question} \n Hint: {str(evidence)} \n Here is the schema of the tables which are needed for the SQL generation: \n {context}\n {examples}"},
                 ]
                 inputs = tokenizer.apply_chat_template(
                     prompt,
