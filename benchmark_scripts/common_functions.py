@@ -206,9 +206,6 @@ def generate_model_specific_prompt_for_self_hosted_model(
             .replace("[examples]", examples)
         )
         prompt = f"<bos><start_of_turn>user\n{system_prompt} <end_of_turn>\n<start_of_turn>model"
-    
-
-
     else:
         prompt = (
             system_prompt.replace(
