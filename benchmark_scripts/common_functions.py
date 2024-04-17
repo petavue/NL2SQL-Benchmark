@@ -194,6 +194,21 @@ def generate_model_specific_prompt_for_self_hosted_model(
             .replace("[examples]", "")
         )
         prompt = f"### Task \nGenerate a SQL query to answer [QUESTION]{question} \nHint: {str(evidence)}[/QUESTION]### Instructions \n{system_prompt}### Database Schema \nThe query will run on a database with the following schema: {context} ### Answer \nGiven the database schema, here is the SQL query that [QUESTION]{question} \nHint: {str(evidence)}[/QUESTION] {examples} \n[SQL]"
+    elif model_name in [SelfHostedModels.MODEL_GOOGLE_CODEGEMMA_7B]:
+        system_prompt = (
+            system_prompt.replace(
+                "[context]",
+                "Here is the schema of the tables which are needed for the SQL generation: \n"
+                + context,
+            )
+            .replace("[question]", "Question: " + question)
+            .replace("[hint]", "Hint: " + str(evidence))
+            .replace("[examples]", examples)
+        )
+        prompt = f"<bos><start_of_turn>user\n{system_prompt} <end_of_turn>\n<start_of_turn>model"
+    
+
+
     else:
         prompt = (
             system_prompt.replace(

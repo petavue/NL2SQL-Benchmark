@@ -45,6 +45,7 @@ class SelfHostedModels:
     MODEL_DEFOG_SQLCODER_7B_2 = "defog/sqlcoder-7b-2"
     MODEL_MISTRALAI_MISTRAL_7B_V2 = "mistralai/Mistral-7B-Instruct-v0.2"
     MODEL_DATABRICKS_DBRX = "databricks/dbrx-instruct"
+    MODEL_GOOGLE_CODEGEMMA_7B = "google/codegemma-7b-it"
 
 
 class SelfHosted:
