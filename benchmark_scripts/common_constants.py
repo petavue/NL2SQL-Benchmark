@@ -47,7 +47,8 @@ class SelfHostedModels:
     MODEL_DATABRICKS_DBRX = "databricks/dbrx-instruct"
     MODEL_GOOGLE_CODEGEMMA_7B = "google/codegemma-7b-it"
     MODEL_MISTRALAI_MIXTRAL_8X22B = "mistral-community/Mixtral-8x22B-v0.1"
-
+    MODEL_META_LLAMA_3_70B = "meta-llama/Meta-Llama-3-70B-Instruct"
+    
 
 class SelfHosted:
     MODEL_WEIGHTS_DIRECTORY = "../model-weights/"

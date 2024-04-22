@@ -46,7 +46,8 @@ supported_models = {
     "mistral-v2": SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B_V2,
     "dbrx": SelfHostedModels.MODEL_DATABRICKS_DBRX,
     "cg-7b": SelfHostedModels.MODEL_GOOGLE_CODEGEMMA_7B,
-    "mixtral8x22": SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X22B
+    "mixtral8x22": SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X22B,
+    "llama-3-70b": SelfHostedModels.MODEL_META_LLAMA_3_70B  
 }
 
 model_tensor_types = {
@@ -60,7 +61,8 @@ model_tensor_types = {
     SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B_V2: torch.bfloat16,
     SelfHostedModels.MODEL_DATABRICKS_DBRX: torch.bfloat16,
     SelfHostedModels.MODEL_GOOGLE_CODEGEMMA_7B: torch.bfloat16,
-    SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X22B: torch.bfloat16
+    SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X22B: torch.bfloat16,
+    SelfHostedModels.MODEL_META_LLAMA_3_70B: torch.bfloat16
 }
 
 
