@@ -17,9 +17,9 @@ Eg: For inferencing GPT-3.5 with Open-AI api use open-ai.py script:
 ```bash
 python open-ai.py -h 
 ```
-The above command will give all the instructions which will be needed to run the inference, The script asks for model name, number of instruction to be passed in the prompt, dataset size. When these are not provided the default values are take. default value for dataset size is 360, if you want to run for different dataset lenght make sure that there is a csv file with  name in the format bird_equal_split_<dataset_length>.csv, use data_extraction.py and Final_equal_split.py to get create a dataset of different size.
+The above command will give all the instructions which will be needed to run the inference, The script asks for model name, number of instruction to be passed in the prompt, dataset size. When these are not provided the default values are take. default value for dataset size is 360, if you want to run for different dataset lenght make sure that there is a csv file with  name in the format bird_equal_split_<dataset_length>.csv, use data_extraction.py and Final_equal_split.py to get create a dataset of different size, These are also explained in the Data section.
 
-The default bird_equal_split_360.csv will have 360 rows which contain natural language question, schema, correct SQL query, hardness in each row, Also the dataset is made in suah a way that there are equal number of SQL query for each hardness catogory(120 simple, 120 moderate, 120 challenging). This dataset is used in our benchmark. The default instruciton used in the benchmark can also be changed in the common_functions.py file, These are also explained in the Data section.
+The default bird_equal_split_360.csv will have 360 rows which contain natural language question, schema, correct SQL query, hardness in each row, Also the dataset is made in suah a way that there are equal number of SQL query for each hardness catogory(120 simple, 120 moderate, 120 challenging). This dataset is used in our benchmark. The default instruciton used in the benchmark can also be changed in the common_functions.py file.
 
 Command to run GPT-3 in OpenAI api using 5 instruction and 360 as dataset size:
 ```bash
