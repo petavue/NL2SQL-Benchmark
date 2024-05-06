@@ -27,12 +27,13 @@ python open-ai.py --models gpt-3 --inst 5 --il 360
 ```
 
 The scripts creates folders and files which are needed for the evaliation scripts,
+The directory structure for inference results is organized as follows:
 
-inference_results
-    \__ environment_name
-            \__ short_size
-                    \__ model_name
-                            \__ instruction_size
+- `inference_results`: Root directory for all inference results.
+    - `environment_name`: Specifies the environment in which the inference was conducted.
+        - `short_size`: Indicates the size category of the dataset used for inference.
+            - `model_name`: Name of the model used for inference.
+                - `instruction_size`: Size or length of the instructions or commands used in the inference process.
 
 Each instruction_size file will contain dev_gold.sql, dev.json, execution-log.jsonl, predict_dev.json, metrics.csv, gold.text, predicted.txt which are used by evaluation scripts.
 
