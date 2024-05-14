@@ -67,3 +67,4 @@ class GeminiModels:
 class OpenAIModels:
     MODEL_GPT_3 = "gpt-3.5-turbo-16k"
     MODEL_GPT_4 = "gpt-4-turbo-preview"
+    MODEL_GPT_4_O = "gpt-4o-2024-05-13"

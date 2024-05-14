@@ -5,7 +5,7 @@ import argparse
 import numpy as np
 
 # constants
-dataset = './bird_equal_split_360.csv'
+dataset = '../sql_data/bird_equal_split_360.csv' # give path of bird_equal_split_360.csv file
 directory_to_search = './'
 hardness_list = ['simple', 'moderate', 'challenging', 'total']
 
@@ -22,6 +22,7 @@ models_dict = {
         'mistral.mistral-7b-instruct-v0_2': {'input_cost': 0.00015*1000, 'output_cost': 0.0002*1000, 'per_tokens': 1000000, 'platform': 'amazon-bedrock','as_on_date':'1/04/24'},
         'gpt-4-turbo-preview': {'input_cost': 0.01*1000, 'output_cost': 0.03*1000, 'per_tokens': 1000000, 'platform': 'open-ai','as_on_date':'1/04/24'},
         'gpt-3.5-turbo-16k': {'input_cost': 0.0005*1000, 'output_cost': 0.0015*1000, 'per_tokens': 1000000, 'platform': 'open-ai','as_on_date':'1/04/24'},
+        'gpt-4o-2024-05-13': {'input_cost': 5, 'output_cost': 15, 'per_tokens': 1000000, 'platform': 'open-ai','as_on_date':'14/05/24'},
         'gemini-1.0-pro-latest': {'input_cost': 0, 'output_cost': 0, 'per_tokens': 1000000, 'platform': 'gemini','as_on_date':'7/3/24'},
         'claude-3-haiku-20240307': {'input_cost': 0.25, 'output_cost': 1.25, 'per_tokens': 1000000, 'platform': 'anthropic','as_on_date':'1/04/24'},
         'claude-3-sonnet-20240229': {'input_cost': 3, 'output_cost': 15, 'per_tokens': 1000000, 'platform': 'anthropic','as_on_date':'1/04/24'},
@@ -37,7 +38,9 @@ mapping={'anthropic.claude-3-haiku-20240307-v1_0':'claude-3-haiku',
        'Llama-2-70b-chat-hf':'llama2-70b',
        'Mistral-7B-Instruct-v0.1':'mistral-7b', 'Mixtral-8x7B-Instruct-v0.1':'mixtral-8x7b',
        'gemini-1.0-pro-latest':'gemini',
-       'gpt-3.5-turbo-16k':'gpt-3.5', 'gpt-4-turbo-preview':'gpt-4',
+       'gpt-3.5-turbo-16k':'gpt-3.5', 
+       'gpt-4-turbo-preview':'gpt-4',
+       'gpt-4o-2024-05-13':'gpt-4-o',
        'Mixtral-8x7B-Instruct-v0.1':'mixtral-8x7b','Mistral-7B-Instruct-v0.2':'mistral-7b-v2',
        'Mistral-7B-Instruct-v0.1':'mistral-7b-v1',
        'CodeLlama-70b-Instruct-hf':'CodeLlama-70b','CodeLlama-34b-Instruct-hf':'CodeLlama-34b',
@@ -290,14 +293,11 @@ df_met = df_met[(df_met['dataset_size'] == 360) & (df_met['hardness'] == 'total'
 inst_list = df_met["instruction"].unique()
 env_list = df_met["environment"].unique()
 metric_list = df_met['metric'].unique()
-models = {
-    env_list[0]: df_met[df_met["environment"] == env_list[0]]["model"].unique(),
-    env_list[1]: df_met[df_met["environment"] == env_list[1]]["model"].unique(),
-    env_list[2]: df_met[df_met["environment"] == env_list[2]]["model"].unique(),
-    env_list[3]: df_met[df_met["environment"] == env_list[3]]["model"].unique(),
-    env_list[4]: df_met[df_met["environment"] == env_list[4]]["model"].unique(),
-    env_list[5]: df_met[df_met["environment"] == env_list[5]]["model"].unique(),
-}
+models = {}
+
+for ele_env in  env_list:
+    models[ele_env] = df_met[df_met["environment"] == ele_env]["model"].unique()
+
 for env in env_list:
     env_df= df_met[df_met['environment']==env]
     temp_models_lis= models[env]
