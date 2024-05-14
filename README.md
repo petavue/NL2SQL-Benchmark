@@ -64,3 +64,4 @@ The generated metrics offer a comprehensive analysis for each inference, facilit
 For further exploration and reference, all finalized data on each inference, model costs, and throughput for all models is accessible in either XLSX or CSV format. You can find this data conveniently organized within the results folder of this repository.
 
 Link to the Log files : - 
+[LOGS](https://drive.google.com/drive/folders/1K8ODQ3zwdNoFVA0LCF6COBeW6rTcsZyg?usp=drive_link)
