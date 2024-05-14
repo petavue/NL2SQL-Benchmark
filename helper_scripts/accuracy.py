@@ -8,8 +8,8 @@ import pathlib
 import json
 
 
-dataset = './bird_equal_split_360.csv'
-tssq_path = '' #add the DAMO-CONVAI/BIRD path which has the evauation script eg:- /Users/username/petavue/DAMO-ConvAI
+dataset = '../sql_data/bird_equal_split_360.csv' # give correct path of the bird_equal_split_360 file.
+tssq_path = '/Users/username/DAMO-ConvAI' #add the DAMO-CONVAI/BIRD path which has the evauation script eg:- /Users/username/petavue/DAMO-ConvAI
 start_path = './'
 dest = tssq_path
 command = f'python -u {tssq_path}/bird/llm/src/evaluation.py --db_root_path {tssq_path}/bird/llm/data/dev_databases/ --predicted_sql_path {tssq_path}/bird/llm/evaldata/ --data_mode dev --ground_truth_path {tssq_path}/bird/llm/evaldata/ --mode_gt gt --mode_predict gpt --diff_json_path {tssq_path}/bird/llm/evaldata/dev.json --meta_time_out 30.0'

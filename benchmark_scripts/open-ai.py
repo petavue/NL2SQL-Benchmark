@@ -30,6 +30,7 @@ OPENAI_KEY = os.getenv("OPENAI_KEY")
 supported_models = {
     "gpt-4": OpenAIModels.MODEL_GPT_4,
     "gpt-3": OpenAIModels.MODEL_GPT_3,
+    "gpt-4-o": OpenAIModels.MODEL_GPT_4_O,
 }
 
 
