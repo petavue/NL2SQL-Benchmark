@@ -180,6 +180,7 @@ def generate_model_specific_prompt_for_self_hosted_model(
         SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B,
         SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X7B,
         SelfHostedModels.MODEL_MISTRALAI_MISTRAL_7B_V2,
+        SelfHostedModels.MODEL_MISTRALAI_MIXTRAL_8X22B,
     ]:
         system_prompt = (
             system_prompt.replace(

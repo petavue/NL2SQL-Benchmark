@@ -33,6 +33,8 @@ supported_models = {
     "mistral": AnyscaleModels.MODEL_MISTRALAI_MISTRAL_7B,
     "mixtral": AnyscaleModels.MODEL_MISTRALAI_MIXTRAL_8X7B,
     "llama": AnyscaleModels.MODEL_META_LLAMA,
+    "mixtral-8x22b": AnyscaleModels.MODEL_MISTRALAI_MIXTRAL_8X22B,
+    "llama-3-70b": AnyscaleModels.MODEL_META_LLAMA_3_70b
 }
 
 

@@ -36,6 +36,7 @@ supported_models = {
     "claude3-haiku": BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU,
     "mistral": BedrockModels.MODEL_ANTHROPIC_MISTRAL_7B,
     "mixtral": BedrockModels.MODEL_ANTHROPIC_MIXTRAL,
+    "llama-3-70b": BedrockModels.MODEL_META_LLAMA_3_70b
 }
 
 
@@ -150,7 +151,7 @@ def run_queries_on_bedrock(
                 BedrockModels.MODEL_ANTHROPIC_CLAUDE_3_HAIKU,
             ]:
                 llm_response_content = response_body["content"][0]["text"]
-            elif model_name == BedrockModels.MODEL_META_LLAMA:
+            elif model_name in [BedrockModels.MODEL_META_LLAMA,BedrockModels.MODEL_META_LLAMA_3_70b]:
                 llm_response_content = response_body["generation"]
 
             if "select" in llm_response_content.lower():

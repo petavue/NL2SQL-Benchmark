@@ -27,6 +27,7 @@ models_dict = {
         'claude-3-haiku-20240307': {'input_cost': 0.25, 'output_cost': 1.25, 'per_tokens': 1000000, 'platform': 'anthropic','as_on_date':'1/04/24'},
         'claude-3-sonnet-20240229': {'input_cost': 3, 'output_cost': 15, 'per_tokens': 1000000, 'platform': 'anthropic','as_on_date':'1/04/24'},
         'claude-3-opus-20240229': {'input_cost': 15, 'output_cost': 75, 'per_tokens': 1000000, 'platform': 'anthropic','as_on_date':'1/04/24'},
+        'meta.llama3-70b-instruct-v1_0': {'input_cost': 0.00265*1000, 'output_cost': 0.0035*1000, 'per_tokens': 1000000, 'platform': 'amazon-bedrock','as_on_date':'23/05/24'},
     }
 
 mapping={'anthropic.claude-3-haiku-20240307-v1_0':'claude-3-haiku',
@@ -45,7 +46,10 @@ mapping={'anthropic.claude-3-haiku-20240307-v1_0':'claude-3-haiku',
        'Mistral-7B-Instruct-v0.1':'mistral-7b-v1',
        'CodeLlama-70b-Instruct-hf':'CodeLlama-70b','CodeLlama-34b-Instruct-hf':'CodeLlama-34b',
        'dbrx-instruct':'dbrx','sqlcoder-7b-2':'sqlcoder-7b-2','sqlcoder-70b-alpha':'sqlcoder-70b-alpha',
-       'WizardCoder-33B-V1.1':'WizardCoder'}
+       'WizardCoder-33B-V1.1':'WizardCoder',
+       'Meta-Llama-3-70B-Instruct':'Llama-3-70b',
+       'meta.llama3-70b-instruct-v1_0':'Llama-3-70b'
+       }
 
 template_data = {'environment': [],'model': [],'instruction': [],'dataset_size': [],'metric': [],'hardness': [],'value': []}
 entire_df = pd.DataFrame(template_data)
@@ -130,6 +134,7 @@ def get_processed_df(complete_dataframe, model_name,environment,inst,dataset_siz
         input_cost = models_dict[model_name]['input_cost']
         output_cost = models_dict[model_name]['output_cost']
         token_per = models_dict[model_name]['per_tokens']
+        print(f"{input_cost} {output_cost} {models_dict[model_name]['platform']}")
     
     #template to save the metrics.
     final_dict = {
@@ -145,6 +150,7 @@ def get_processed_df(complete_dataframe, model_name,environment,inst,dataset_siz
     #converting infernece time to secs.
     complete_dataframe['seconds'] = complete_dataframe['response_time'].apply(lambda x: time_str_to_seconds(x))
     #calculating correct output tokens for self-hosted.
+    print(environment)
     if environment == 'self-hosted':
         complete_dataframe['llm_response_tokens'] = complete_dataframe['llm_response_tokens'] - complete_dataframe['llm_prompt_tokens']
     

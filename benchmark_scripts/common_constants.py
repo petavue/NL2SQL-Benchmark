@@ -21,6 +21,7 @@ class BedrockModels:
     MODEL_ANTHROPIC_CLAUDE_3_HAIKU = "anthropic.claude-3-haiku-20240307-v1:0"
     MODEL_ANTHROPIC_MIXTRAL = "mistral.mixtral-8x7b-instruct-v0:1"
     MODEL_ANTHROPIC_MISTRAL_7B = "mistral.mistral-7b-instruct-v0:2"
+    MODEL_META_LLAMA_3_70b='meta.llama3-70b-instruct-v1:0'
 
 
 class AmazonBedrock:
@@ -33,6 +34,8 @@ class AnyscaleModels:
     MODEL_META_CODELLAMA_34B = "codellama/CodeLlama-34b-Instruct-hf"
     MODEL_MISTRALAI_MISTRAL_7B = "mistralai/Mistral-7B-Instruct-v0.1"
     MODEL_MISTRALAI_MIXTRAL_8X7B = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+    MODEL_META_LLAMA_3_70b="meta-llama/Meta-Llama-3-70B-Instruct"
+    MODEL_MISTRALAI_MIXTRAL_8X22B="mistralai/Mixtral-8x22B-Instruct-v0.1"
 
 
 class SelfHostedModels:
@@ -46,7 +49,7 @@ class SelfHostedModels:
     MODEL_MISTRALAI_MISTRAL_7B_V2 = "mistralai/Mistral-7B-Instruct-v0.2"
     MODEL_DATABRICKS_DBRX = "databricks/dbrx-instruct"
     MODEL_GOOGLE_CODEGEMMA_7B = "google/codegemma-7b-it"
-    MODEL_MISTRALAI_MIXTRAL_8X22B = "mistral-community/Mixtral-8x22B-v0.1"
+    MODEL_MISTRALAI_MIXTRAL_8X22B = "mistralai/Mixtral-8x22B-Instruct-v0.1"
     MODEL_META_LLAMA_3_70B = "meta-llama/Meta-Llama-3-70B-Instruct"
     
 
